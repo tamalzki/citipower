@@ -116,9 +116,27 @@
                             ₱{{ number_format($totalProfit, 2) }}
                         </strong>
                     </div>
+                    <div style="display:flex; gap:10px; margin-top:8px; flex-wrap:wrap;">
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;
+                                    padding:8px 12px; flex:1;">
+                            <div style="font-size:10px; color:#64748b; font-weight:600; text-transform:uppercase;">Person in Charge</div>
+                            <div style="font-size:13px; margin-top:2px; font-weight:600;">{{ $sale->poc ?: '—' }}</div>
+                        </div>
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;
+                                    padding:8px 12px; flex:1;">
+                            <div style="font-size:10px; color:#64748b; font-weight:600; text-transform:uppercase;">Receipt Issued</div>
+                            <div style="margin-top:2px;">
+                                @if($sale->issued_receipt)
+                                    <span class="badge badge-success">Yes</span>
+                                @else
+                                    <span class="badge badge-gray">No</span>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
                     @if($sale->note)
                     <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;
-                                padding:10px 12px; margin-top:4px;">
+                                padding:10px 12px; margin-top:8px;">
                         <div style="font-size:10.5px; color:#64748b; font-weight:600;
                                     text-transform:uppercase; letter-spacing:0.5px;">Note</div>
                         <div style="font-size:13px; margin-top:3px;">{{ $sale->note }}</div>

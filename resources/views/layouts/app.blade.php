@@ -624,6 +624,42 @@
             </svg>
             Inventory Logs
         </a>
+
+        <a href="{{ route('stock-transfers.index') }}"
+           class="{{ request()->routeIs('stock-transfers.*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round" style="flex-shrink:0;">
+                <path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/>
+            </svg>
+            Stock Transfers
+        </a>
+
+        @if($role === 'owner')
+        <a href="{{ route('branches.index') }}"
+           class="{{ request()->routeIs('branches.*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round" style="flex-shrink:0;">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+            Branches
+        </a>
+        @endif
+        @endif
+
+        {{-- ── Supplier Ledger (owner only) ── --}}
+        @if($role === 'owner')
+        <a href="{{ route('supplier-ledger.index') }}"
+           class="{{ request()->routeIs('supplier-ledger.*') ? 'active' : '' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round" style="flex-shrink:0;">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            Supplier Ledger
+        </a>
         @endif
 
         {{-- ── Reports (owner only) ── --}}

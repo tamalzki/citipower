@@ -242,7 +242,21 @@
                         </div>
                     </div>
 
-                    <div class="form-group" style="margin-top:14px;">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
+                        <div class="form-group" style="margin:0;">
+                            <label>Person in Charge (POC)</label>
+                            <input type="text" name="poc" class="form-control" placeholder="e.g. Maria">
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label>Issued Receipt?</label>
+                            <select name="issued_receipt" class="form-control">
+                                <option value="0">No</option>
+                                <option value="1">Yes</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top:12px;">
                         <label>Note <span style="color:#94a3b8; font-weight:400;">(Optional)</span></label>
                         <input type="text" name="note" class="form-control" placeholder="e.g. Walk-in customer">
                     </div>

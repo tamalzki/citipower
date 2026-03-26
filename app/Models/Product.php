@@ -9,6 +9,10 @@ class Product extends Model
     protected $fillable = [
         'name',
         'sku',
+        'brand',
+        'category',
+        'model',
+        'description',
         'purchase_price',
         'selling_price',
         'stock_quantity',
@@ -39,5 +43,19 @@ class Product extends Model
     public function purchaseOrderItems()
     {
         return $this->hasMany(PurchaseOrderItem::class);
+    }
+
+    public function suppliers()
+    {
+        return $this->belongsToMany(Supplier::class, 'product_suppliers')
+                    ->withPivot('cost_price')
+                    ->withTimestamps();
+    }
+
+    public function cheapestSupplier(): ?Supplier
+    {
+        return $this->suppliers()
+                    ->orderBy('product_suppliers.cost_price')
+                    ->first();
     }
 }

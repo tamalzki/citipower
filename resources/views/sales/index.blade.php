@@ -22,7 +22,8 @@
                         <th>Total Amount</th>
                         <th>Paid</th>
                         <th>Status</th>
-                        <th>Note</th>
+                        <th>POC</th>
+                        <th>Receipt</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -54,7 +55,14 @@
                                 {{ ucfirst($sale->payment_status) }}
                             </span>
                         </td>
-                        <td style="color:#64748b;">{{ $sale->note ?? '—' }}</td>
+                        <td style="color:#64748b;">{{ $sale->poc ?? '—' }}</td>
+                        <td>
+                            @if($sale->issued_receipt)
+                                <span class="badge badge-success">Yes</span>
+                            @else
+                                <span class="badge badge-gray">No</span>
+                            @endif
+                        </td>
                         <td>
                             <div style="display:flex; gap:6px;">
                                 <a href="{{ route('sales.show', $sale) }}"

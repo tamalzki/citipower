@@ -12,6 +12,8 @@ class Sale extends Model
         'discount_value',
         'discount_amount',
         'note',
+        'issued_receipt',
+        'poc',
     ];
 
     protected $casts = [

@@ -7,10 +7,22 @@ use Illuminate\Http\Request;
 
 class SupplierController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $suppliers = Supplier::orderBy('name')->paginate(20);
-        return view('suppliers.index', compact('suppliers'));
+        $search    = $request->get('search');
+        $suppliers = Supplier::when($search, fn($q) => $q->where(function ($q2) use ($search) {
+                $q2->where('name',           'like', "%{$search}%")
+                   ->orWhere('contact_person','like', "%{$search}%")
+                   ->orWhere('phone',         'like', "%{$search}%")
+                   ->orWhere('email',         'like', "%{$search}%");
+            }))
+            ->withSum('deliveries', 'amount')
+            ->withSum('supplierPayments', 'amount')
+            ->orderBy('name')
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('suppliers.index', compact('suppliers', 'search'));
     }
 
     public function create()

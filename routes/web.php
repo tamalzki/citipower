@@ -11,6 +11,9 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PurchaseOrderController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\BranchController;
+use App\Http\Controllers\StockTransferController;
+use App\Http\Controllers\SupplierLedgerController;
 use App\Models\Expense;
 use App\Models\Product;
 use App\Models\Sale;
@@ -110,6 +113,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/purchase-orders/{purchase_order}/receive', [PurchaseOrderController::class, 'receive'])
         ->middleware('role:owner,inventory')
         ->name('purchase-orders.receive');
+
+    // Branches & Stock Transfers
+    Route::resource('branches', BranchController::class)
+        ->except(['show'])
+        ->middleware('role:owner');
+    Route::resource('stock-transfers', StockTransferController::class)
+        ->only(['index', 'create', 'store'])
+        ->middleware('role:owner,inventory');
+
+    // Supplier Ledger
+    Route::middleware('role:owner')->group(function () {
+        Route::get('/supplier-ledger', [SupplierLedgerController::class, 'index'])->name('supplier-ledger.index');
+        Route::get('/supplier-ledger/{supplier}', [SupplierLedgerController::class, 'show'])->name('supplier-ledger.show');
+        Route::post('/supplier-ledger/{supplier}/deliveries', [SupplierLedgerController::class, 'storeDelivery'])->name('supplier-ledger.store-delivery');
+        Route::post('/supplier-ledger/{supplier}/payments', [SupplierLedgerController::class, 'storePayment'])->name('supplier-ledger.store-payment');
+        Route::delete('/supplier-ledger/{supplier}/deliveries/{delivery}', [SupplierLedgerController::class, 'destroyDelivery'])->name('supplier-ledger.destroy-delivery');
+        Route::delete('/supplier-ledger/{supplier}/payments/{payment}', [SupplierLedgerController::class, 'destroyPayment'])->name('supplier-ledger.destroy-payment');
+    });
 
     // Reports
     Route::middleware('role:owner')->group(function () {

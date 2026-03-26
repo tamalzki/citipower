@@ -1,14 +1,22 @@
 @extends('layouts.app')
-
 @section('title', 'Suppliers')
-
 @section('content')
     <div class="page-header">
-        <div>
-            <h2>Suppliers</h2>
-            <p>Manage supplier records for purchase orders</p>
-        </div>
+        <div><h2>Suppliers</h2><p>Manage supplier records and view payment ledgers</p></div>
         <a href="{{ route('suppliers.create') }}" class="btn btn-primary">+ Add Supplier</a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="GET" style="display:flex; gap:10px; align-items:center;">
+                <input type="text" name="search" class="form-control"
+                       value="{{ $search ?? '' }}"
+                       placeholder="Search by name, contact, phone, email..."
+                       style="flex:1; max-width:380px;">
+                <button type="submit" class="btn btn-primary">Search</button>
+                @if(!empty($search))<a href="{{ route('suppliers.index') }}" class="btn btn-secondary">Clear</a>@endif
+            </form>
+        </div>
     </div>
 
     <div class="card">
@@ -21,30 +29,53 @@
                     <th>Contact Person</th>
                     <th>Phone</th>
                     <th>Email</th>
+                    <th>Balance</th>
                     <th>Actions</th>
                 </tr>
                 </thead>
                 <tbody>
                 @forelse($suppliers as $supplier)
+                    @php
+                        $delivered = (float) ($supplier->deliveries_sum_amount ?? 0);
+                        $paid      = (float) ($supplier->supplier_payments_sum_amount ?? 0);
+                        $balance   = max(0, $delivered - $paid);
+                    @endphp
                     <tr>
-                        <td>{{ $supplier->id }}</td>
+                        <td style="color:#94a3b8; font-size:12px;">{{ $loop->iteration }}</td>
                         <td style="font-weight:600;">{{ $supplier->name }}</td>
                         <td>{{ $supplier->contact_person ?: '—' }}</td>
                         <td>{{ $supplier->phone ?: '—' }}</td>
                         <td>{{ $supplier->email ?: '—' }}</td>
                         <td>
+                            @if($balance > 0)
+                                <span style="font-weight:700; color:#dc2626;">₱{{ number_format($balance, 2) }}</span>
+                            @else
+                                <span style="color:#16a34a; font-weight:600;">Paid</span>
+                            @endif
+                        </td>
+                        <td>
                             <div style="display:flex; gap:6px;">
+                                <a href="{{ route('supplier-ledger.show', $supplier) }}" class="btn btn-primary btn-sm">Ledger</a>
                                 <a href="{{ route('suppliers.edit', $supplier) }}" class="btn btn-secondary btn-sm">Edit</a>
                                 <form method="POST" action="{{ route('suppliers.destroy', $supplier) }}" onsubmit="return confirm('Delete this supplier?')">
-                                    @csrf
-                                    @method('DELETE')
+                                    @csrf @method('DELETE')
                                     <button class="btn btn-danger btn-sm">Delete</button>
                                 </form>
                             </div>
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="6" style="color:#94a3b8;">No suppliers yet.</td></tr>
+                    <tr>
+                        <td colspan="7">
+                            <div class="empty-state">
+                                <div class="empty-icon">🏭</div>
+                                <p>{{ !empty($search) ? 'No suppliers found.' : 'No suppliers yet.' }}</p>
+                                @if(empty($search))
+                                    <a href="{{ route('suppliers.create') }}" class="btn btn-primary">Add Supplier</a>
+                                @endif
+                            </div>
+                        </td>
+                    </tr>
                 @endforelse
                 </tbody>
             </table>

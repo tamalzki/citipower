@@ -40,6 +40,8 @@ class SalesController extends Controller
             'discount_type'      => 'nullable|in:percent,fixed',
             'discount_value'     => 'nullable|numeric|min:0',
             'note'               => 'nullable|string|max:255',
+            'issued_receipt'     => 'nullable|boolean',
+            'poc'                => 'nullable|string|max:100',
             'initial_payment_amount' => 'nullable|numeric|min:0',
             'initial_payment_method' => 'nullable|in:cash,card,bank_transfer,e_wallet,other',
             'initial_payment_reference_no' => 'nullable|string|max:100',
@@ -100,11 +102,13 @@ class SalesController extends Controller
             $totalAmount = max(0, $subtotalAmount - $discountAmount);
 
             $sale = Sale::create([
-                'total_amount' => $totalAmount,
-                'discount_type' => $discountType,
+                'total_amount'   => $totalAmount,
+                'discount_type'  => $discountType,
                 'discount_value' => $discountValue,
                 'discount_amount' => $discountAmount,
-                'note'         => $request->note,
+                'note'           => $request->note,
+                'issued_receipt' => $request->boolean('issued_receipt'),
+                'poc'            => $request->poc,
             ]);
 
             foreach ($saleItemsData as $itemData) {
