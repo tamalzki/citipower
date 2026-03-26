@@ -1,0 +1,64 @@
+@extends('layouts.app')
+
+@section('title', 'Expense Categories')
+
+@section('content')
+    <div class="page-header">
+        <div>
+            <h2>Expense Categories</h2>
+            <p>Manage categories like Utilities, Food, and other expense groups</p>
+        </div>
+        <div style="display:flex; gap:8px;">
+            <a href="{{ route('expenses.index') }}" class="btn btn-secondary">Expenses</a>
+            <a href="{{ route('expense-categories.create') }}" class="btn btn-primary">+ Add Category</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Category Name</th>
+                        <th>Description</th>
+                        <th>Used In</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($categories as $category)
+                        <tr>
+                            <td>{{ $category->id }}</td>
+                            <td style="font-weight:600; color:#0f172a;">{{ $category->name }}</td>
+                            <td>{{ $category->description ?: '—' }}</td>
+                            <td>
+                                <span class="badge badge-info">{{ number_format($category->expenses_count) }} expense(s)</span>
+                            </td>
+                            <td>
+                                <div style="display:flex; gap:6px;">
+                                    <a href="{{ route('expense-categories.edit', $category) }}" class="btn btn-secondary btn-sm">Edit</a>
+                                    <form action="{{ route('expense-categories.destroy', $category) }}" method="POST" style="display:inline" onsubmit="return confirm('Delete this category?')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5">
+                                <div class="empty-state">
+                                    <div class="empty-icon">🏷️</div>
+                                    <p>No expense categories yet.</p>
+                                    <a href="{{ route('expense-categories.create') }}" class="btn btn-primary">Add Category</a>
+                                </div>
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+@endsection
