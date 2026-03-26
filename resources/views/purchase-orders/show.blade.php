@@ -177,9 +177,31 @@
 </div>
 
 @if($purchaseOrder->received_at)
-    <p style="font-size:12px; color:#94a3b8; margin-top:8px;">
-        Received on {{ $purchaseOrder->received_at->format('M d, Y h:i A') }}
-    </p>
+<div class="card" style="margin-top:0;">
+    <div class="card-title" style="color:#16a34a;">Receiving Details</div>
+    <div class="card-body">
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+            <div>
+                <div style="font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase;">Received On</div>
+                <div style="font-weight:600; margin-top:3px;">{{ $purchaseOrder->received_at->format('M d, Y h:i A') }}</div>
+            </div>
+            <div>
+                <div style="font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase;">DR Number</div>
+                <div style="font-weight:600; margin-top:3px;">{{ $purchaseOrder->dr_number ?? '—' }}</div>
+            </div>
+            <div>
+                <div style="font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase;">Arrival Date</div>
+                <div style="font-weight:600; margin-top:3px;">{{ $purchaseOrder->arrival_date?->format('M d, Y') ?? '—' }}</div>
+            </div>
+            @if($purchaseOrder->arrival_notes)
+            <div style="grid-column:1/-1;">
+                <div style="font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase;">Arrival Notes</div>
+                <div style="margin-top:3px; color:#374151;">{{ $purchaseOrder->arrival_notes }}</div>
+            </div>
+            @endif
+        </div>
+    </div>
+</div>
 @endif
 
 
@@ -196,6 +218,20 @@
 
         <form method="POST" id="receive-form">
             @csrf
+            <div style="padding:16px 20px 0; display:grid; grid-template-columns:1fr 1fr; gap:12px; border-bottom:1px solid #f1f5f9; padding-bottom:16px;">
+                <div class="form-group" style="margin:0;">
+                    <label style="font-size:12px; font-weight:600; color:#374151;">DR Number</label>
+                    <input type="text" name="dr_number" class="form-control" placeholder="e.g. #97861" style="margin-top:4px;">
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label style="font-size:12px; font-weight:600; color:#374151;">Arrival Date</label>
+                    <input type="date" name="arrival_date" class="form-control" value="{{ now()->toDateString() }}" style="margin-top:4px;">
+                </div>
+                <div class="form-group" style="margin:0; grid-column:1/-1;">
+                    <label style="font-size:12px; font-weight:600; color:#374151;">Arrival Notes</label>
+                    <input type="text" name="arrival_notes" class="form-control" placeholder="e.g. Delivered to main branch warehouse" style="margin-top:4px;">
+                </div>
+            </div>
             <div class="modal-body" id="modal-body">
                 <div class="modal-loading" id="modal-loading">Loading order details…</div>
             </div>

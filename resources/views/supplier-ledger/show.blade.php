@@ -15,20 +15,17 @@
         </div>
     </div>
 
-    {{-- Date Filter --}}
     <div class="card">
         <div class="card-body">
-            <form method="GET" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
-                <div class="form-group" style="margin:0;">
-                    <label style="font-size:12px;">From</label>
-                    <input type="date" name="date_from" class="form-control" value="{{ $dateFrom }}">
-                </div>
-                <div class="form-group" style="margin:0;">
-                    <label style="font-size:12px;">To</label>
-                    <input type="date" name="date_to" class="form-control" value="{{ $dateTo }}">
-                </div>
-                <button type="submit" class="btn btn-primary">Apply</button>
-                <a href="{{ route('supplier-ledger.show', $supplier) }}" class="btn btn-secondary">All Time</a>
+            <form method="GET" style="display:flex; gap:10px; align-items:center;">
+                <input type="text" name="search" class="form-control"
+                       value="{{ $search ?? '' }}"
+                       placeholder="Search DR number, date (e.g. 2025-01), notes..."
+                       style="flex:1; max-width:420px;">
+                <button type="submit" class="btn btn-primary">Search</button>
+                @if(!empty($search))
+                    <a href="{{ route('supplier-ledger.show', $supplier) }}" class="btn btn-secondary">Clear</a>
+                @endif
             </form>
         </div>
     </div>

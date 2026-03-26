@@ -31,13 +31,24 @@ class SupplierLedgerController extends Controller
 
     public function show(Supplier $supplier, Request $request)
     {
-        $dateFrom = $request->get('date_from');
-        $dateTo   = $request->get('date_to');
+        $search = trim($request->get('search', ''));
 
-        $deliveries = SupplierDelivery::where('supplier_id', $supplier->id)
-            ->when($dateFrom, fn($q) => $q->whereDate('delivery_date', '>=', $dateFrom))
-            ->when($dateTo,   fn($q) => $q->whereDate('delivery_date', '<=', $dateTo))
-            ->get()
+        // Always load ALL entries for accurate running balance totals
+        $allDeliveries = SupplierDelivery::where('supplier_id', $supplier->id)->get();
+        $allPayments   = SupplierPayment::where('supplier_id', $supplier->id)->get();
+
+        $totalDelivered = (float) $allDeliveries->sum('amount');
+        $totalPaid      = (float) $allPayments->sum('amount');
+        $balance        = max(0, $totalDelivered - $totalPaid);
+
+        // Apply search filter for display only
+        $deliveries = $allDeliveries
+            ->when($search, fn($c) => $c->filter(fn($d) =>
+                str_contains(strtolower($d->dr_number ?? ''), strtolower($search)) ||
+                str_contains(strtolower($d->notes ?? ''), strtolower($search)) ||
+                str_contains($d->delivery_date->format('Y-m-d'), $search) ||
+                str_contains($d->delivery_date->format('M d, Y'), $search)
+            ))
             ->map(fn($d) => [
                 'id'     => $d->id,
                 'type'   => 'delivery',
@@ -49,10 +60,13 @@ class SupplierLedgerController extends Controller
                 'model'  => $d,
             ]);
 
-        $payments = SupplierPayment::where('supplier_id', $supplier->id)
-            ->when($dateFrom, fn($q) => $q->whereDate('payment_date', '>=', $dateFrom))
-            ->when($dateTo,   fn($q) => $q->whereDate('payment_date', '<=', $dateTo))
-            ->get()
+        $payments = $allPayments
+            ->when($search, fn($c) => $c->filter(fn($p) =>
+                str_contains(strtolower($p->reference_no ?? ''), strtolower($search)) ||
+                str_contains(strtolower($p->notes ?? ''), strtolower($search)) ||
+                str_contains($p->payment_date->format('Y-m-d'), $search) ||
+                str_contains($p->payment_date->format('M d, Y'), $search)
+            ))
             ->map(fn($p) => [
                 'id'     => $p->id,
                 'type'   => 'payment',
@@ -64,9 +78,9 @@ class SupplierLedgerController extends Controller
                 'model'  => $p,
             ]);
 
+        // Merge and sort by date, then rebuild running balance on filtered set
         $entries = $deliveries->merge($payments)->sortBy('date')->values();
 
-        // Build running balance
         $runningBalance = 0;
         $entries = $entries->map(function ($entry) use (&$runningBalance) {
             $runningBalance += $entry['debit'] - $entry['credit'];
@@ -74,12 +88,8 @@ class SupplierLedgerController extends Controller
             return $entry;
         });
 
-        $totalDelivered = $deliveries->sum('debit');
-        $totalPaid      = $payments->sum('credit');
-        $balance        = max(0, $totalDelivered - $totalPaid);
-
         return view('supplier-ledger.show', compact(
-            'supplier', 'entries', 'totalDelivered', 'totalPaid', 'balance', 'dateFrom', 'dateTo'
+            'supplier', 'entries', 'totalDelivered', 'totalPaid', 'balance', 'search'
         ));
     }
 

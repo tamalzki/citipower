@@ -11,27 +11,21 @@ class StockTransferController extends Controller
 {
     public function index(Request $request)
     {
-        $search     = $request->get('search');
-        $branchId   = $request->get('branch_id');
-        $dateFrom   = $request->get('date_from');
-        $dateTo     = $request->get('date_to');
+        $search = $request->get('search');
 
         $transfers = StockTransfer::with(['product', 'fromBranch', 'toBranch', 'transferredBy'])
-            ->when($search, fn($q) => $q->whereHas('product', fn($q2) =>
-                $q2->where('name', 'like', "%{$search}%")
-            ))
-            ->when($branchId, fn($q) =>
-                $q->where('from_branch_id', $branchId)->orWhere('to_branch_id', $branchId)
-            )
-            ->when($dateFrom, fn($q) => $q->whereDate('created_at', '>=', $dateFrom))
-            ->when($dateTo,   fn($q) => $q->whereDate('created_at', '<=', $dateTo))
+            ->when($search, function ($q) use ($search) {
+                $q->whereHas('product', fn($q2) => $q2->where('name', 'like', "%{$search}%"))
+                  ->orWhereHas('fromBranch', fn($q2) => $q2->where('name', 'like', "%{$search}%"))
+                  ->orWhereHas('toBranch',   fn($q2) => $q2->where('name', 'like', "%{$search}%"));
+            })
             ->orderByDesc('created_at')
             ->paginate(30)
             ->withQueryString();
 
         $branches = Branch::orderBy('name')->get();
 
-        return view('stock-transfers.index', compact('transfers', 'branches', 'search', 'branchId', 'dateFrom', 'dateTo'));
+        return view('stock-transfers.index', compact('transfers', 'branches', 'search'));
     }
 
     public function create()

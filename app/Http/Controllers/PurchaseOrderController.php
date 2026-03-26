@@ -115,10 +115,12 @@ class PurchaseOrderController extends Controller
         $purchaseOrder->load('supplier', 'items.product');
 
         return response()->json([
-            'po_number'  => $purchaseOrder->po_number,
-            'supplier'   => $purchaseOrder->supplier?->name,
-            'status'     => $purchaseOrder->status,
-            'items'      => $purchaseOrder->items->map(fn ($item) => [
+            'po_number'    => $purchaseOrder->po_number,
+            'supplier'     => $purchaseOrder->supplier?->name,
+            'status'       => $purchaseOrder->status,
+            'dr_number'    => $purchaseOrder->dr_number,
+            'arrival_date' => $purchaseOrder->arrival_date?->format('Y-m-d'),
+            'items'        => $purchaseOrder->items->map(fn ($item) => [
                 'id'             => $item->id,
                 'product_name'   => $item->product?->name ?? '—',
                 'sku'            => $item->product?->sku ?? '',
@@ -135,9 +137,18 @@ class PurchaseOrderController extends Controller
             return back()->with('error', 'Purchase order already received.');
         }
 
+        $request->merge([
+            'arrival_date' => $request->input('arrival_date') ?: null,
+        ]);
+
+        $request->validate([
+            'dr_number'     => 'nullable|string|max:100',
+            'arrival_date'  => 'nullable|date',
+            'arrival_notes' => 'nullable|string|max:500',
+        ]);
+
         $purchaseOrder->load('items.product');
 
-        // Build validated qty map: item_id => qty to receive
         $quantities = collect($request->input('quantities', []))
             ->mapWithKeys(fn ($qty, $id) => [(int) $id => max(0, (int) $qty)])
             ->filter(fn ($qty) => $qty > 0);
@@ -146,7 +157,7 @@ class PurchaseOrderController extends Controller
             return back()->with('error', 'Enter at least one item quantity to receive.');
         }
 
-        DB::transaction(function () use ($purchaseOrder, $quantities) {
+        DB::transaction(function () use ($request, $purchaseOrder, $quantities) {
             foreach ($purchaseOrder->items as $item) {
                 $qty = $quantities->get($item->id, 0);
                 if ($qty <= 0) continue;
@@ -168,13 +179,16 @@ class PurchaseOrderController extends Controller
                     'quantity'       => $receiveQty,
                     'previous_stock' => $previousStock,
                     'new_stock'      => $newStock,
-                    'note'           => 'Received ' . $purchaseOrder->po_number,
+                    'note'           => 'Received ' . $purchaseOrder->po_number . ($request->dr_number ? ' DR#' . $request->dr_number : ''),
                 ]);
             }
 
             $purchaseOrder->update([
-                'status'      => 'received',
-                'received_at' => now(),
+                'status'        => 'received',
+                'received_at'   => now(),
+                'dr_number'     => $request->dr_number,
+                'arrival_date'  => $request->arrival_date,
+                'arrival_notes' => $request->arrival_notes,
             ]);
         });
 

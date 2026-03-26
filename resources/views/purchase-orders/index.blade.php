@@ -125,29 +125,31 @@
             <thead>
             <tr>
                 <th>PO #</th>
-                <th>Order date</th>
+                <th>Order Date</th>
                 <th>Expected</th>
                 <th>Supplier</th>
+                <th>DR Number</th>
+                <th>Arrival Date</th>
                 <th>Status</th>
                 <th>Total</th>
-                <th>Received At</th>
                 <th>Actions</th>
             </tr>
             </thead>
             <tbody>
             @forelse($purchaseOrders as $po)
                 <tr>
-                    <td style="font-weight:600;">{{ $po->po_number }}</td>
+                    <td style="font-weight:600; color:#2563eb;">{{ $po->po_number }}</td>
                     <td>{{ $po->order_date->format('M d, Y') }}</td>
-                    <td>{{ $po->expected_arrival_date ? $po->expected_arrival_date->format('M d, Y') : '—' }}</td>
+                    <td>{{ $po->expected_arrival_date?->format('M d, Y') ?? '—' }}</td>
                     <td>{{ $po->supplier?->name }}</td>
+                    <td style="font-weight:600;">{{ $po->dr_number ?? '—' }}</td>
+                    <td>{{ $po->arrival_date?->format('M d, Y') ?? '—' }}</td>
                     <td>
                         <span class="badge {{ $po->status === 'received' ? 'badge-success' : 'badge-warning' }}">
                             {{ ucfirst($po->status) }}
                         </span>
                     </td>
-                    <td>₱{{ number_format($po->total_amount, 2) }}</td>
-                    <td>{{ $po->received_at ? $po->received_at->format('M d, Y') : '—' }}</td>
+                    <td style="font-weight:600;">₱{{ number_format($po->total_amount, 2) }}</td>
                     <td>
                         <div style="display:flex; gap:6px;">
                             <a href="{{ route('purchase-orders.show', $po) }}" class="btn btn-secondary btn-sm">View</a>
@@ -162,7 +164,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="8" style="color:#94a3b8;">No purchase orders yet.</td></tr>
+                <tr><td colspan="9" style="color:#94a3b8; text-align:center; padding:30px;">No purchase orders yet.</td></tr>
             @endforelse
             </tbody>
         </table>
@@ -184,6 +186,26 @@
 
         <form method="POST" id="receive-form">
             @csrf
+
+            {{-- DR / Arrival fields --}}
+            <div style="padding:16px 20px 0; display:grid; grid-template-columns:1fr 1fr; gap:12px; border-bottom:1px solid #f1f5f9; padding-bottom:16px;">
+                <div class="form-group" style="margin:0;">
+                    <label style="font-size:12px; font-weight:600; color:#374151;">DR Number</label>
+                    <input type="text" name="dr_number" id="receive-dr-number" class="form-control"
+                           placeholder="e.g. #97861" style="margin-top:4px;">
+                </div>
+                <div class="form-group" style="margin:0;">
+                    <label style="font-size:12px; font-weight:600; color:#374151;">Arrival Date</label>
+                    <input type="date" name="arrival_date" id="receive-arrival-date" class="form-control"
+                           value="{{ now()->toDateString() }}" style="margin-top:4px;">
+                </div>
+                <div class="form-group" style="margin:0; grid-column:1/-1;">
+                    <label style="font-size:12px; font-weight:600; color:#374151;">Arrival Notes</label>
+                    <input type="text" name="arrival_notes" class="form-control"
+                           placeholder="e.g. Delivered to main branch warehouse" style="margin-top:4px;">
+                </div>
+            </div>
+
             <div class="modal-body" id="modal-body">
                 <div class="modal-loading" id="modal-loading">Loading order details…</div>
             </div>

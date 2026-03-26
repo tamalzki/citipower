@@ -15,13 +15,17 @@ class PurchaseOrder extends Model
         'total_amount',
         'received_at',
         'note',
+        'dr_number',
+        'arrival_date',
+        'arrival_notes',
     ];
 
     protected $casts = [
-        'order_date' => 'date',
+        'order_date'            => 'date',
         'expected_arrival_date' => 'date',
-        'received_at' => 'datetime',
-        'total_amount' => 'decimal:2',
+        'arrival_date'          => 'date',
+        'received_at'           => 'datetime',
+        'total_amount'          => 'decimal:2',
     ];
 
     public function supplier()
