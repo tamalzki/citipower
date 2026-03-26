@@ -2,18 +2,40 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ExpenseCategory;
+use App\Models\Branch;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Expense;
+use App\Models\StockTransfer;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
 {
+    private const MAIN_BRANCH_CODE = 'DAV-MAIN';
+    private const SECOND_BRANCH_CODE = 'DIG-SECOND';
+    private const MAIN_BRANCH_LABEL = 'DAVAO -MAIN';
+    private const SECOND_BRANCH_LABEL = 'DIGOS -SECOND';
+
+    public function hub()
+    {
+        return view('reports.hub');
+    }
+
     public function inventory(Request $request)
     {
+        $mainBranch = Branch::firstOrCreate(['code' => self::MAIN_BRANCH_CODE], ['name' => self::MAIN_BRANCH_LABEL]);
+        $secondBranch = Branch::firstOrCreate(['code' => self::SECOND_BRANCH_CODE], ['name' => self::SECOND_BRANCH_LABEL]);
+        if ($mainBranch->name !== self::MAIN_BRANCH_LABEL) {
+            $mainBranch->update(['name' => self::MAIN_BRANCH_LABEL]);
+        }
+        if ($secondBranch->name !== self::SECOND_BRANCH_LABEL) {
+            $secondBranch->update(['name' => self::SECOND_BRANCH_LABEL]);
+        }
+
         $status = $request->string('status')->toString() ?: 'all';
         $search = $request->string('search')->toString();
 
@@ -21,7 +43,11 @@ class ReportController extends Controller
             ->when($search, function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'like', "%{$search}%")
-                        ->orWhere('sku', 'like', "%{$search}%");
+                        ->orWhere('sku', 'like', "%{$search}%")
+                        ->orWhere('brand', 'like', "%{$search}%")
+                        ->orWhere('model', 'like', "%{$search}%")
+                        ->orWhere('category', 'like', "%{$search}%")
+                        ->orWhereHas('suppliers', fn ($s) => $s->where('suppliers.name', 'like', "%{$search}%"));
                 });
             })
             ->when($status === 'low', function ($query) {
@@ -35,18 +61,62 @@ class ReportController extends Controller
             ->paginate(20)
             ->withQueryString();
 
+        $toSecond = StockTransfer::where('to_branch_id', $secondBranch->id)
+            ->selectRaw('product_id, SUM(quantity) as qty')
+            ->groupBy('product_id')
+            ->pluck('qty', 'product_id');
+
+        $fromSecond = StockTransfer::where('from_branch_id', $secondBranch->id)
+            ->selectRaw('product_id, SUM(quantity) as qty')
+            ->groupBy('product_id')
+            ->pluck('qty', 'product_id');
+
+        $branchStocks = [];
+        foreach ($products as $p) {
+            $secondQty = max(0, (int) ($toSecond[$p->id] ?? 0) - (int) ($fromSecond[$p->id] ?? 0));
+            $mainQty = (int) $p->stock_quantity;
+            $branchStocks[$p->id] = [
+                'main' => $mainQty,
+                'second' => $secondQty,
+                'total' => $mainQty + $secondQty,
+            ];
+        }
+
+        $allProducts = Product::get(['id', 'stock_quantity', 'purchase_price', 'selling_price']);
+        $mainTotal = (int) $allProducts->sum('stock_quantity');
+        $secondTotal = 0;
+        $combinedCostValue = 0.0;
+        $combinedRetailValue = 0.0;
+        foreach ($allProducts as $p) {
+            $secondQty = max(0, (int) ($toSecond[$p->id] ?? 0) - (int) ($fromSecond[$p->id] ?? 0));
+            $secondTotal += $secondQty;
+            $combinedQty = (int) $p->stock_quantity + $secondQty;
+            $combinedCostValue += ((float) $p->purchase_price * $combinedQty);
+            $combinedRetailValue += ((float) $p->selling_price * $combinedQty);
+        }
+
         $summary = [
             'total_products' => Product::count(),
-            'total_units' => (int) Product::sum('stock_quantity'),
+            'total_units' => $mainTotal + $secondTotal,
             'low_stock_count' => Product::whereColumn('stock_quantity', '<=', 'minimum_stock')
                 ->where('stock_quantity', '>', 0)
                 ->count(),
             'out_of_stock_count' => Product::where('stock_quantity', '<=', 0)->count(),
-            'inventory_cost_value' => (float) Product::selectRaw('COALESCE(SUM(stock_quantity * purchase_price), 0) as total')->value('total'),
-            'inventory_retail_value' => (float) Product::selectRaw('COALESCE(SUM(stock_quantity * selling_price), 0) as total')->value('total'),
+            'inventory_cost_value' => $combinedCostValue,
+            'inventory_retail_value' => $combinedRetailValue,
+            'main_branch_units' => $mainTotal,
+            'second_branch_units' => $secondTotal,
         ];
 
-        return view('reports.inventory', compact('products', 'summary', 'status', 'search'));
+        return view('reports.inventory', compact(
+            'products',
+            'summary',
+            'status',
+            'search',
+            'mainBranch',
+            'secondBranch',
+            'branchStocks'
+        ));
     }
 
     public function sales(Request $request)
@@ -207,6 +277,55 @@ class ReportController extends Controller
             'productProfitability' => $productProfitability,
             'dateFrom' => $dateFrom->toDateString(),
             'dateTo' => $dateTo->toDateString(),
+        ]);
+    }
+
+    public function expenses(Request $request)
+    {
+        $dateFrom = $request->input('date_from')
+            ? Carbon::parse($request->input('date_from'))->startOfDay()
+            : now()->startOfMonth()->startOfDay();
+        $dateTo = $request->input('date_to')
+            ? Carbon::parse($request->input('date_to'))->endOfDay()
+            : now()->endOfDay();
+
+        if ($dateFrom->gt($dateTo)) {
+            [$dateFrom, $dateTo] = [$dateTo->copy()->startOfDay(), $dateFrom->copy()->endOfDay()];
+        }
+
+        // Totals
+        $totalAmount = (float) Expense::whereBetween('expense_date', [
+            $dateFrom->toDateString(), $dateTo->toDateString()
+        ])->sum('amount');
+
+        $totalCount = Expense::whereBetween('expense_date', [
+            $dateFrom->toDateString(), $dateTo->toDateString()
+        ])->count();
+
+        // Breakdown by category
+        $byCategory = Expense::query()
+            ->select('expense_category_id', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as count'))
+            ->whereBetween('expense_date', [$dateFrom->toDateString(), $dateTo->toDateString()])
+            ->with('category')
+            ->groupBy('expense_category_id')
+            ->orderByDesc('total')
+            ->get();
+
+        // Line items (paginated)
+        $expenses = Expense::with('category')
+            ->whereBetween('expense_date', [$dateFrom->toDateString(), $dateTo->toDateString()])
+            ->orderByDesc('expense_date')
+            ->orderByDesc('id')
+            ->paginate(30)
+            ->withQueryString();
+
+        return view('reports.expenses', [
+            'dateFrom'    => $dateFrom->toDateString(),
+            'dateTo'      => $dateTo->toDateString(),
+            'totalAmount' => $totalAmount,
+            'totalCount'  => $totalCount,
+            'byCategory'  => $byCategory,
+            'expenses'    => $expenses,
         ]);
     }
 }

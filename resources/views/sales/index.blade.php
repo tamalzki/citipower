@@ -12,6 +12,22 @@
     </div>
 
     <div class="card">
+        <div class="card-body">
+            <form method="GET" action="{{ route('sales.index') }}"
+                  style="display:flex; gap:10px; align-items:center;">
+                <input type="text" name="search" class="form-control"
+                       value="{{ $search }}"
+                       placeholder="Search sale #, product, SKU, POC, note..."
+                       style="flex:1; max-width:420px;">
+                <button type="submit" class="btn btn-primary">Search</button>
+                @if($search)
+                    <a href="{{ route('sales.index') }}" class="btn btn-secondary">Clear</a>
+                @endif
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
         <div class="table-wrapper">
             <table>
                 <thead>
@@ -20,10 +36,9 @@
                         <th>Date & Time</th>
                         <th>Items</th>
                         <th>Total Amount</th>
-                        <th>Paid</th>
-                        <th>Status</th>
                         <th>POC</th>
                         <th>Receipt</th>
+                        <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -49,12 +64,6 @@
                                 ₱{{ number_format($sale->total_amount, 2) }}
                             </span>
                         </td>
-                        <td>₱{{ number_format($sale->paid_amount, 2) }}</td>
-                        <td>
-                            <span class="badge {{ $sale->payment_status === 'paid' ? 'badge-success' : ($sale->payment_status === 'partial' ? 'badge-warning' : 'badge-danger') }}">
-                                {{ ucfirst($sale->payment_status) }}
-                            </span>
-                        </td>
                         <td style="color:#64748b;">{{ $sale->poc ?? '—' }}</td>
                         <td>
                             @if($sale->issued_receipt)
@@ -63,6 +72,7 @@
                                 <span class="badge badge-gray">No</span>
                             @endif
                         </td>
+                        <td><span class="badge badge-success">Paid</span></td>
                         <td>
                             <div style="display:flex; gap:6px;">
                                 <a href="{{ route('sales.show', $sale) }}"
@@ -84,7 +94,7 @@
                         <td colspan="8">
                             <div class="empty-state">
                                 <div class="empty-icon">🧾</div>
-                                <p>No sales recorded yet.</p>
+                                <p>{{ $search ? 'No sales match your search.' : 'No sales recorded yet.' }}</p>
                                 <a href="{{ route('sales.create') }}" class="btn btn-primary">Record First Sale</a>
                             </div>
                         </td>

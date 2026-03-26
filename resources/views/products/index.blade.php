@@ -17,7 +17,7 @@
             <form method="GET" action="{{ route('products.index') }}"
                   style="display:flex; gap:10px; align-items:center;">
                 <input type="text" name="search" class="form-control"
-                       placeholder="Search by name, SKU, brand, model, category..."
+                       placeholder="Search by product, supplier, or supplier cost..."
                        value="{{ $search }}" style="flex:1; max-width:420px;">
                 <button type="submit" class="btn btn-primary">Search</button>
                 @if($search)
@@ -32,24 +32,21 @@
             <table>
                 <thead>
                     <tr>
-                        <th>#</th>
                         <th>Name</th>
                         <th>Brand</th>
                         <th>Category</th>
                         <th>Model</th>
                         <th>SKU</th>
+                        <th>Suppliers & Cost</th>
                         <th>Purchase Price</th>
                         <th>Selling Price</th>
-                        <th>Margin</th>
                         <th>Stock</th>
-                        <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($products as $product)
                     <tr>
-                        <td style="color:#94a3b8; font-size:12px;">{{ $loop->iteration + ($products->currentPage() - 1) * $products->perPage() }}</td>
                         <td>
                             <a href="{{ route('products.show', $product) }}"
                                style="font-weight:600; color:#2563eb; text-decoration:none;">
@@ -66,30 +63,46 @@
                                 <span style="color:#cbd5e1;">—</span>
                             @endif
                         </td>
-                        <td>₱{{ number_format($product->purchase_price, 2) }}</td>
-                        <td style="font-weight:600;">₱{{ number_format($product->selling_price, 2) }}</td>
                         <td>
-                            <span style="font-weight:600; color:{{ $product->profitMargin() >= 0 ? '#16a34a' : '#dc2626' }}">
-                                {{ number_format($product->profitMargin(), 1) }}%
-                            </span>
+                            @if($product->suppliers->isEmpty())
+                                <span style="color:#94a3b8;">—</span>
+                            @else
+                                <div style="display:flex; flex-direction:column; gap:2px; min-width:180px;">
+                                    @foreach($product->suppliers->sortBy('pivot.cost_price')->take(3) as $supplier)
+                                        <div style="font-size:11.5px; line-height:1.25;">
+                                            <span style="font-weight:600;">{{ $supplier->name }}</span>
+                                            <span style="color:#334155;">- ₱{{ number_format($supplier->pivot->cost_price, 2) }}</span>
+                                        </div>
+                                    @endforeach
+                                    @if($product->suppliers->count() > 3)
+                                        <span style="font-size:11px; color:#64748b;">+{{ $product->suppliers->count() - 3 }} more</span>
+                                    @endif
+                                </div>
+                            @endif
                         </td>
-                        <td style="font-weight:700; font-size:15px;">{{ $product->stock_quantity }}</td>
+                        <td style="white-space:nowrap;">₱{{ number_format($product->purchase_price, 2) }}</td>
+                        <td style="font-weight:600; white-space:nowrap;">₱{{ number_format($product->selling_price, 2) }}</td>
                         <td>
                             @if($product->stock_quantity <= 0)
-                                <span class="badge badge-danger">Out of Stock</span>
+                                <span style="display:inline-block; padding:2px 8px; border-radius:999px; font-weight:700; color:#dc2626; background:#fef2f2; border:1px solid #fecaca;">
+                                    {{ $product->stock_quantity }}
+                                </span>
                             @elseif($product->isLowStock())
-                                <span class="badge badge-warning">Low Stock</span>
+                                <span style="display:inline-block; padding:2px 8px; border-radius:999px; font-weight:700; color:#d97706; background:#fffbeb; border:1px solid #fde68a;">
+                                    {{ $product->stock_quantity }}
+                                </span>
                             @else
-                                <span class="badge badge-success">OK</span>
+                                <span style="font-weight:700; font-size:15px; color:#16a34a;">{{ $product->stock_quantity }}</span>
                             @endif
                         </td>
                         <td>
-                            <div style="display:flex; gap:5px; flex-wrap:wrap;">
+                            <div style="display:flex; gap:4px; flex-wrap:nowrap; white-space:nowrap;">
                                 <a href="{{ route('products.show', $product) }}" class="btn btn-secondary btn-sm">View</a>
                                 <a href="{{ route('inventory.add-stock', $product) }}" class="btn btn-success btn-sm">+ Stock</a>
+                                <a href="{{ route('inventory.adjust-stock', $product) }}" class="btn btn-warning btn-sm">Adjust</a>
                                 <a href="{{ route('products.edit', $product) }}" class="btn btn-secondary btn-sm">Edit</a>
                                 <form action="{{ route('products.destroy', $product) }}" method="POST"
-                                      style="display:inline" onsubmit="return confirm('Delete this product?')">
+                                      style="display:inline; margin:0;" onsubmit="return confirm('Delete this product?')">
                                     @csrf @method('DELETE')
                                     <button class="btn btn-danger btn-sm">Delete</button>
                                 </form>
@@ -98,7 +111,7 @@
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="12">
+                        <td colspan="10">
                             <div class="empty-state">
                                 <div class="empty-icon">📦</div>
                                 <p>{{ $search ? 'No products found matching "' . $search . '".' : 'No products yet.' }}</p>

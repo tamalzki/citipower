@@ -6,19 +6,34 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Product;
 use App\Models\InventoryLog;
-use App\Models\Payment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class SalesController extends Controller
 {
-    public function index()
-    {
-        $sales = Sale::with('items.product', 'payments')
-            ->orderByDesc('created_at')
-            ->paginate(20);
+    private const MAIN_BRANCH_LABEL = 'DAVAO -MAIN';
 
-        return view('sales.index', compact('sales'));
+    public function index(Request $request)
+    {
+        $search = trim($request->input('search', ''));
+
+        $sales = Sale::with('items.product', 'payments')
+            ->when($search, function ($q) use ($search) {
+                $q->where(function ($q2) use ($search) {
+                    $q2->where('id', 'like', "%{$search}%")
+                        ->orWhere('poc', 'like', "%{$search}%")
+                        ->orWhere('note', 'like', "%{$search}%")
+                        ->orWhereHas('items.product', function ($qp) use ($search) {
+                            $qp->where('name', 'like', "%{$search}%")
+                               ->orWhere('sku', 'like', "%{$search}%");
+                        });
+                });
+            })
+            ->orderByDesc('created_at')
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('sales.index', compact('sales', 'search'));
     }
 
     public function create()
@@ -40,11 +55,8 @@ class SalesController extends Controller
             'discount_type'      => 'nullable|in:percent,fixed',
             'discount_value'     => 'nullable|numeric|min:0',
             'note'               => 'nullable|string|max:255',
-            'issued_receipt'     => 'nullable|boolean',
+            'issued_receipt'     => 'required|in:0,1',
             'poc'                => 'nullable|string|max:100',
-            'initial_payment_amount' => 'nullable|numeric|min:0',
-            'initial_payment_method' => 'nullable|in:cash,card,bank_transfer,e_wallet,other',
-            'initial_payment_reference_no' => 'nullable|string|max:100',
         ]);
 
         DB::transaction(function () use ($request) {
@@ -60,7 +72,7 @@ class SalesController extends Controller
                 $previousStock = $product->stock_quantity;
                 $newStock      = $previousStock - $quantity;
 
-                // Deduct stock
+                // Sales always deduct from main-branch product stock.
                 $product->update(['stock_quantity' => $newStock]);
 
                 // Inventory log
@@ -70,7 +82,7 @@ class SalesController extends Controller
                     'quantity'       => -$quantity,
                     'previous_stock' => $previousStock,
                     'new_stock'      => $newStock,
-                    'note'           => 'Sale recorded',
+                    'note'           => 'Sale recorded (' . self::MAIN_BRANCH_LABEL . ')',
                 ]);
 
                 $subtotalAmount += $subtotal;
@@ -115,18 +127,6 @@ class SalesController extends Controller
                 $sale->items()->create($itemData);
             }
 
-            $initialPayment = (float) ($request->initial_payment_amount ?? 0);
-            if ($initialPayment > 0) {
-                $paymentAmount = min($initialPayment, $totalAmount);
-                Payment::create([
-                    'sale_id' => $sale->id,
-                    'payment_date' => now(),
-                    'amount' => $paymentAmount,
-                    'payment_method' => $request->initial_payment_method ?: 'cash',
-                    'reference_no' => $request->initial_payment_reference_no,
-                    'note' => 'Initial payment upon sale creation',
-                ]);
-            }
         });
 
         return redirect()->route('sales.index')
@@ -160,7 +160,7 @@ class SalesController extends Controller
                     'quantity'       => $item->quantity,
                     'previous_stock' => $previousStock,
                     'new_stock'      => $newStock,
-                    'note'           => 'Sale #' . $sale->id . ' voided',
+                    'note'           => 'Sale #' . $sale->id . ' voided (' . self::MAIN_BRANCH_LABEL . ')',
                 ]);
             }
 

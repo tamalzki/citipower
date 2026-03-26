@@ -5,6 +5,28 @@
 @section('content')
 
 <style>
+    .field-error {
+        border-color: #dc2626 !important;
+        box-shadow: 0 0 0 3px rgba(220, 38, 38, .10) !important;
+    }
+    .error-text {
+        display: block;
+        margin-top: 5px;
+        font-size: 11px;
+        color: #dc2626;
+        font-weight: 600;
+    }
+    .items-error-box {
+        border: 1.5px solid #fecaca;
+        background: #fef2f2;
+        color: #b91c1c;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        margin: 8px 10px 0;
+    }
+
     /* ── Product search panel (same pattern as PO) ── */
     .product-panel {
         display: none;
@@ -113,7 +135,7 @@
         <div class="alert alert-danger">{{ $errors->first() }}</div>
     @endif
 
-    <div style="display:grid; grid-template-columns:1fr 380px; gap:16px; align-items:start;">
+    <div style="display:grid; grid-template-columns:1fr 360px; gap:16px; align-items:start;">
 
         {{-- ══ LEFT ══ --}}
         <div style="display:flex; flex-direction:column; gap:16px;">
@@ -148,6 +170,9 @@
                 <div class="card-title">
                     Sale Items
                     <span id="item-count" class="badge badge-info" style="margin-left:6px;">0 items</span>
+                    <span style="margin-left:8px; font-size:11px; color:#64748b; font-weight:500;">
+                        Inventory source: DAVAO -MAIN
+                    </span>
                 </div>
                 <div>
                     <table id="items-table">
@@ -155,7 +180,7 @@
                             <tr>
                                 <th>Product</th>
                                 <th style="width:120px; text-align:right;">Price</th>
-                                <th style="width:72px; text-align:center;">Stock</th>
+                                <th style="width:120px; text-align:center;">Stock (DAVAO -MAIN)</th>
                                 <th style="width:90px; text-align:center;">Qty</th>
                                 <th style="width:120px; text-align:right;">Subtotal</th>
                                 <th style="width:40px;"></th>
@@ -171,22 +196,30 @@
                                 </td>
                             </tr>
                         </tbody>
+                        <tfoot>
+                            <tr style="background:#f8fafc; border-top:1px solid #e2e8f0;">
+                                <td colspan="4" style="text-align:right; font-weight:700; padding:10px 14px; color:#64748b;">Subtotal</td>
+                                <td style="text-align:right; font-weight:800; color:#0f172a; padding:10px 14px;">
+                                    <span id="items-table-subtotal">₱0.00</span>
+                                </td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
                     </table>
+                    @if($errors->has('items') || $errors->has('items.*.product_id') || $errors->has('items.*.quantity'))
+                        <div class="items-error-box">
+                            {{ $errors->first('items') ?: $errors->first('items.*.product_id') ?: $errors->first('items.*.quantity') }}
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>
 
         {{-- ══ RIGHT: Summary ══ --}}
-        <div style="position:sticky; top:68px;">
+        <div style="position:sticky; top:56px; align-self:start;">
             <div class="card">
-                <div class="card-title">Order Summary</div>
-                <div class="card-body">
-
-                    <div id="summary-list" style="margin-bottom:14px; min-height:40px;">
-                        <div style="color:#94a3b8; font-size:12px; text-align:center; padding:10px 0;">
-                            No items yet
-                        </div>
-                    </div>
+                <div class="card-title">Checkout</div>
+                <div class="card-body" style="max-height:calc(100vh - 124px); overflow:auto; padding-top:12px;">
 
                     <div style="border-top:1px solid #f1f5f9; padding-top:10px;">
 
@@ -195,39 +228,18 @@
                             <span id="subtotal-display" style="font-weight:600;">₱0.00</span>
                         </div>
 
-                        {{-- Discount --}}
+                        {{-- Discount (Fixed Amount) --}}
                         <div style="padding:10px 0; border-top:1px dashed #e2e8f0; margin-top:6px;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                                <span style="font-size:12px; color:#64748b; font-weight:600;">DISCOUNT</span>
-                                <button type="button" id="toggle-discount" onclick="toggleDiscount()"
-                                        class="btn btn-secondary btn-sm">+ Add Discount</button>
+                                <span style="font-size:12px; color:#64748b; font-weight:600;">DISCOUNT (FIXED)</span>
                             </div>
-
-                            <div id="discount-section" style="display:none;">
-                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
-                                    <button type="button" id="btn-percent" onclick="setDiscountType('percent')"
-                                            class="btn btn-secondary btn-sm" style="justify-content:center;">
-                                        % Percentage
-                                    </button>
-                                    <button type="button" id="btn-fixed" onclick="setDiscountType('fixed')"
-                                            class="btn btn-secondary btn-sm" style="justify-content:center;">
-                                        ₱ Fixed Amount
-                                    </button>
-                                </div>
-
-                                <div id="discount-input-wrap" style="display:none; flex-direction:column; gap:6px;">
-                                    <div style="display:flex; align-items:center; gap:6px;">
-                                        <span id="discount-prefix"
-                                              style="font-size:13px; font-weight:700; color:#64748b; min-width:16px;"></span>
-                                        <input type="number" id="discount-value" class="form-control"
-                                               placeholder="0" min="0" step="0.01">
-                                        <button type="button" onclick="clearDiscount()" class="btn btn-danger btn-sm">✕</button>
-                                    </div>
-                                    <div id="discount-display" style="font-size:12px; color:#dc2626; font-weight:600;"></div>
-                                </div>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span style="font-size:13px; font-weight:700; color:#64748b;">₱</span>
+                                <input type="number" id="discount-value" class="form-control"
+                                       placeholder="0.00" min="0" step="0.01">
                             </div>
-
-                            <input type="hidden" name="discount_type"   id="discount_type"          value="">
+                            <div id="discount-display" style="font-size:12px; color:#dc2626; font-weight:600; margin-top:6px;"></div>
+                            <input type="hidden" name="discount_type"   id="discount_type"          value="fixed">
                             <input type="hidden" name="discount_value"  id="discount_value_hidden"  value="0">
                             <input type="hidden" name="discount_amount" id="discount_amount_hidden" value="0">
                         </div>
@@ -242,54 +254,48 @@
                         </div>
                     </div>
 
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
                         <div class="form-group" style="margin:0;">
                             <label>Person in Charge (POC)</label>
-                            <input type="text" name="poc" class="form-control" placeholder="e.g. Maria">
+                            <input type="text" name="poc" class="form-control" placeholder="e.g. Maria"
+                                   value="{{ old('poc') }}">
                         </div>
                         <div class="form-group" style="margin:0;">
                             <label>Issued Receipt?</label>
-                            <select name="issued_receipt" class="form-control">
-                                <option value="0">No</option>
-                                <option value="1">Yes</option>
+                            <select name="issued_receipt" class="form-control" required>
+                                <option value="" {{ old('issued_receipt') === null ? 'selected' : '' }} disabled>Select one...</option>
+                                <option value="1" {{ old('issued_receipt') === '1' ? 'selected' : '' }}>Yes</option>
+                                <option value="0" {{ old('issued_receipt') === '0' ? 'selected' : '' }}>No</option>
                             </select>
+                            @error('issued_receipt')<small class="error-text">{{ $message }}</small>@enderror
                         </div>
                     </div>
 
-                    <div class="form-group" style="margin-top:12px;">
+                    <div class="form-group" style="margin-top:8px;">
                         <label>Note <span style="color:#94a3b8; font-weight:400;">(Optional)</span></label>
-                        <input type="text" name="note" class="form-control" placeholder="e.g. Walk-in customer">
+                        <input type="text" name="note" class="form-control" placeholder="e.g. Walk-in customer"
+                               value="{{ old('note') }}">
                     </div>
 
-                    <div style="border-top:1px solid #f1f5f9; margin-top:14px; padding-top:12px;">
+                    <div style="border-top:1px solid #f1f5f9; margin-top:10px; padding-top:10px;">
                         <div style="font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase;
                                     letter-spacing:.5px; margin-bottom:8px;">
-                            Initial Payment (Optional)
+                            Customer Payment
                         </div>
                         <div class="form-group">
-                            <label>Amount</label>
-                            <input type="number" name="initial_payment_amount" class="form-control"
-                                   min="0" step="0.01" placeholder="0.00">
+                            <label>Amount Tendered</label>
+                            <input type="number" id="customer-payment" name="customer_payment_tendered" class="form-control"
+                                   min="0" step="0.01" placeholder="0.00" value="{{ old('customer_payment_tendered') }}">
                         </div>
-                        <div class="form-group">
-                            <label>Method</label>
-                            <select name="initial_payment_method" class="form-control">
-                                <option value="cash">Cash</option>
-                                <option value="card">Card</option>
-                                <option value="bank_transfer">Bank Transfer</option>
-                                <option value="e_wallet">E-Wallet</option>
-                                <option value="other">Other</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="margin-bottom:0;">
-                            <label>Reference No <span style="color:#94a3b8; font-weight:400;">(Optional)</span></label>
-                            <input type="text" name="initial_payment_reference_no" class="form-control"
-                                   placeholder="Txn reference">
+                        <div style="display:flex; justify-content:space-between; align-items:center;
+                                    background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px;">
+                            <span style="font-size:12px; color:#64748b; font-weight:600;">Change</span>
+                            <span id="change-display" style="font-size:18px; font-weight:700; color:#16a34a;">₱0.00</span>
                         </div>
                     </div>
 
                     {{-- Submit button --}}
-                    <div style="margin-top:16px;">
+                    <div style="margin-top:12px;">
                         <button type="button" id="submit-btn" onclick="openConfirmModal()" disabled>
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
                                  fill="none" stroke="currentColor" stroke-width="2.5"
@@ -298,7 +304,7 @@
                             </svg>
                             Review &amp; Submit Sale
                         </button>
-                        <div id="submit-hint" style="text-align:center; font-size:11px; color:#94a3b8; margin-top:7px;">
+                        <div id="submit-hint" style="text-align:center; font-size:11px; color:#94a3b8; margin-top:6px;">
                             Add at least one product to continue
                         </div>
                     </div>
@@ -428,7 +434,7 @@
             <div id="confirm-payment-info" style="display:none; margin-top:14px; padding:12px 14px;
                  background:#f0fdf4; border-radius:8px; border:1px solid #bbf7d0;">
                 <div style="font-size:11px; font-weight:700; color:#15803d; text-transform:uppercase;
-                            letter-spacing:.5px; margin-bottom:6px;">Initial Payment</div>
+                            letter-spacing:.5px; margin-bottom:6px;">Customer Payment</div>
                 <div id="confirm-payment-detail" style="font-size:13px; color:#166534;"></div>
             </div>
         </div>
@@ -449,13 +455,15 @@
 <script>
 (function () {
     const products   = @json($products);
+    const oldItems   = @json(old('items', []));
+    const oldDiscountValue = @json(old('discount_value', 0));
     let addedItems   = {};
-    let discountType = null;
     let panelCloseTimer = null;
 
     const searchInput = document.getElementById('product-search');
     const panel       = document.getElementById('product-panel');
     const panelBody   = document.getElementById('panel-body');
+    const errorKeys   = @json(array_keys($errors->toArray()));
 
     /* ── Panel helpers ──────────────────────────────── */
     function openPanel() {
@@ -492,8 +500,8 @@
             const lowStock = !noStock && p.stock_quantity <= p.minimum_stock;
             const stockColor = noStock ? '#dc2626' : lowStock ? '#d97706' : '#16a34a';
             const stockLabel = noStock
-                ? `⚠ Out of stock (${p.stock_quantity})`
-                : lowStock ? `Low: ${p.stock_quantity}` : `${p.stock_quantity} in stock`;
+                ? `⚠ Out of stock in DAVAO -MAIN (${p.stock_quantity})`
+                : lowStock ? `Low in DAVAO -MAIN: ${p.stock_quantity}` : `${p.stock_quantity} in DAVAO -MAIN`;
 
             const div = document.createElement('div');
             div.className = 'sale-product-item' + (inCart ? ' in-cart' : '');
@@ -647,47 +655,9 @@
     /* ── Wire discount value input ──────────────────── */
     document.getElementById('discount-value').addEventListener('input', updateSummary);
 
-    /* ── Discount ───────────────────────────────────── */
-    window.toggleDiscount = function () {
-        const section = document.getElementById('discount-section');
-        const btn     = document.getElementById('toggle-discount');
-        const visible = section.style.display !== 'none';
-        section.style.display = visible ? 'none' : 'block';
-        btn.textContent = visible ? '+ Add Discount' : '− Hide Discount';
-        if (visible) clearDiscount();
-    };
-
-    window.setDiscountType = function (type) {
-        discountType = type;
-        document.getElementById('discount_type').value = type;
-        document.getElementById('discount-input-wrap').style.display = 'flex';
-        document.getElementById('discount-prefix').textContent = type === 'percent' ? '%' : '₱';
-        document.getElementById('btn-percent').className =
-            'btn btn-sm ' + (type === 'percent' ? 'btn-primary' : 'btn-secondary');
-        document.getElementById('btn-fixed').className =
-            'btn btn-sm ' + (type === 'fixed'   ? 'btn-primary' : 'btn-secondary');
-        document.getElementById('discount-value').value = '';
-        document.getElementById('discount-value').focus();
-        updateSummary();
-    };
-
-    window.clearDiscount = function () {
-        discountType = null;
-        document.getElementById('discount_type').value          = '';
-        document.getElementById('discount_value_hidden').value  = '0';
-        document.getElementById('discount_amount_hidden').value = '0';
-        document.getElementById('discount-value').value         = '';
-        document.getElementById('discount-input-wrap').style.display = 'none';
-        document.getElementById('discount-display').textContent = '';
-        document.getElementById('btn-percent').className = 'btn btn-secondary btn-sm';
-        document.getElementById('btn-fixed').className   = 'btn btn-secondary btn-sm';
-        updateSummary();
-    };
-
     /* ── Summary ────────────────────────────────────── */
     function updateSummary() {
         let subtotal    = 0;
-        let summaryHtml = '';
         const itemKeys  = Object.keys(addedItems);
 
         itemKeys.forEach(pid => {
@@ -696,31 +666,14 @@
             const qty     = parseInt(document.getElementById('qty-' + pid)?.value || 1) || 1;
             const itemSub = p.selling_price * qty;
             subtotal += itemSub;
-
-            summaryHtml += `
-                <div style="display:flex; justify-content:space-between; font-size:12.5px;
-                            padding:5px 0; border-bottom:1px solid #f1f5f9;">
-                    <span style="color:#334155; flex:1; padding-right:8px;
-                                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                        ${esc(p.name)} <span style="color:#94a3b8;">× ${qty}</span>
-                    </span>
-                    <span style="font-weight:600; white-space:nowrap;">₱${itemSub.toFixed(2)}</span>
-                </div>`;
         });
-
-        document.getElementById('summary-list').innerHTML = summaryHtml ||
-            '<div style="color:#94a3b8; font-size:12px; text-align:center; padding:10px 0;">No items yet</div>';
         document.getElementById('subtotal-display').textContent = '₱' + subtotal.toFixed(2);
+        document.getElementById('items-table-subtotal').textContent = '₱' + subtotal.toFixed(2);
 
-        // Discount
+        // Discount (fixed only)
         let discountAmount = 0;
         const discVal = parseFloat(document.getElementById('discount-value').value) || 0;
-        if (discountType === 'percent' && discVal > 0) {
-            const pct = Math.min(discVal, 100);
-            discountAmount = subtotal * (pct / 100);
-            document.getElementById('discount-display').textContent =
-                `−₱${discountAmount.toFixed(2)} (${pct}% off)`;
-        } else if (discountType === 'fixed' && discVal > 0) {
+        if (discVal > 0) {
             discountAmount = Math.min(discVal, subtotal);
             document.getElementById('discount-display').textContent =
                 `−₱${discountAmount.toFixed(2)}`;
@@ -734,6 +687,9 @@
 
         const total = Math.max(0, subtotal - discountAmount);
         document.getElementById('grand-total').textContent  = '₱' + total.toFixed(2);
+        const tendered = parseFloat(document.getElementById('customer-payment')?.value) || 0;
+        const change = Math.max(0, tendered - total);
+        document.getElementById('change-display').textContent = '₱' + change.toFixed(2);
         document.getElementById('item-count').textContent   = itemKeys.length + ' item(s)';
 
         const submitBtn  = document.getElementById('submit-btn');
@@ -790,14 +746,12 @@
         }
 
         // Payment info
-        const payAmt = parseFloat(document.querySelector('[name="initial_payment_amount"]')?.value) || 0;
+        const payAmt = parseFloat(document.getElementById('customer-payment')?.value) || 0;
+        const change = Math.max(0, payAmt - total);
         const payInfo = document.getElementById('confirm-payment-info');
         if (payAmt > 0) {
-            const method = document.querySelector('[name="initial_payment_method"]')?.value || '';
-            const ref    = document.querySelector('[name="initial_payment_reference_no"]')?.value || '';
             document.getElementById('confirm-payment-detail').innerHTML =
-                `₱${payAmt.toFixed(2)} via <strong>${method.replace('_', ' ')}</strong>`
-                + (ref ? ` · Ref: ${esc(ref)}` : '');
+                `Tendered: <strong>₱${payAmt.toFixed(2)}</strong> · Change: <strong>₱${change.toFixed(2)}</strong>`;
             payInfo.style.display = 'block';
         } else {
             payInfo.style.display = 'none';
@@ -825,6 +779,66 @@
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') window.closeConfirmModal();
     });
+
+    document.getElementById('customer-payment').addEventListener('input', updateSummary);
+
+    // Restore previously entered items/discount after validation errors.
+    function restoreOldFormState() {
+        if (oldItems && typeof oldItems === 'object') {
+            Object.values(oldItems).forEach(item => {
+                const productId = parseInt(item?.product_id || 0, 10);
+                const qty = Math.max(1, parseInt(item?.quantity || 1, 10));
+                if (!productId) return;
+                addProduct(productId);
+                const qtyInput = document.getElementById('qty-' + productId);
+                if (qtyInput) {
+                    qtyInput.value = qty;
+                    onQtyChange(productId);
+                }
+            });
+        }
+
+        const disc = parseFloat(oldDiscountValue || 0);
+        if (disc > 0) {
+            document.getElementById('discount-value').value = disc;
+        }
+
+        updateSummary();
+    }
+
+    restoreOldFormState();
+
+    // Highlight invalid fields and focus the first one.
+    function errorKeyToInputName(key) {
+        // items.12.quantity -> items[12][quantity]
+        const parts = String(key).split('.');
+        if (parts.length === 0) return key;
+        return parts[0] + parts.slice(1).map(p => `[${p}]`).join('');
+    }
+
+    function highlightErrorFields() {
+        if (!Array.isArray(errorKeys) || errorKeys.length === 0) return;
+
+        let firstField = null;
+        errorKeys.forEach((key) => {
+            const inputName = errorKeyToInputName(key);
+            const field = document.querySelector(`[name="${inputName}"]`) || document.querySelector(`[name="${key}"]`);
+            if (field) {
+                field.classList.add('field-error');
+                if (!firstField) firstField = field;
+            } else if (key.startsWith('items.')) {
+                const table = document.getElementById('items-table');
+                if (table) table.style.outline = '2px solid #fecaca';
+            }
+        });
+
+        if (firstField) {
+            firstField.focus({ preventScroll: true });
+            firstField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    highlightErrorFields();
 
     function esc(s) {
         const d = document.createElement('div');

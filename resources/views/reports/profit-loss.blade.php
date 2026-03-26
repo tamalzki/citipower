@@ -5,6 +5,10 @@
 @section('content')
     <div class="page-header">
         <div>
+            <a href="{{ route('reports.hub') }}"
+               style="font-size:13px; font-weight:600; color:#64748b; text-decoration:none; display:inline-flex; align-items:center; gap:4px; margin-bottom:4px;">
+                ← Back to Reports
+            </a>
             <h2>Profit & Loss (Accrual)</h2>
             <p>Financial performance based on recognized sales, COGS, and operating expenses</p>
         </div>

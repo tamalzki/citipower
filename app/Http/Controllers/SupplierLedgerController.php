@@ -11,20 +11,24 @@ class SupplierLedgerController extends Controller
 {
     public function index(Request $request)
     {
-        $search = $request->get('search');
+        $search = trim($request->get('search', ''));
 
         $suppliers = Supplier::withSum('deliveries', 'amount')
             ->withSum('supplierPayments', 'amount')
-            ->when($search, fn($q) => $q->where('name', 'like', "%{$search}%"))
+            ->when($search, fn($q) => $q->where(function ($query) use ($search) {
+                $query->where('name', 'like', "%{$search}%")
+                    ->orWhere('contact_person', 'like', "%{$search}%");
+            }))
             ->orderBy('name')
             ->get()
             ->map(function ($s) {
-                $s->total_delivered = (float) ($s->deliveries_sum_amount ?? 0);
-                $s->total_paid      = (float) ($s->supplier_payments_sum_amount ?? 0);
-                $s->balance         = max(0, $s->total_delivered - $s->total_paid);
+                $totalDelivered = (float) ($s->deliveries_sum_amount ?? 0);
+                $totalPaid = (float) ($s->supplier_payments_sum_amount ?? 0);
+                $s->total_delivered = $totalDelivered;
+                $s->total_paid = $totalPaid;
+                $s->balance = max(0, $totalDelivered - $totalPaid);
                 return $s;
-            })
-            ->sortByDesc('balance');
+            });
 
         return view('supplier-ledger.index', compact('suppliers', 'search'));
     }
@@ -42,7 +46,9 @@ class SupplierLedgerController extends Controller
         $balance        = max(0, $totalDelivered - $totalPaid);
 
         // Apply search filter for display only
-        $deliveries = $allDeliveries
+        $allDeliveries->load('purchaseOrder');
+
+        $deliveries = collect($allDeliveries)
             ->when($search, fn($c) => $c->filter(fn($d) =>
                 str_contains(strtolower($d->dr_number ?? ''), strtolower($search)) ||
                 str_contains(strtolower($d->notes ?? ''), strtolower($search)) ||
@@ -50,32 +56,49 @@ class SupplierLedgerController extends Controller
                 str_contains($d->delivery_date->format('M d, Y'), $search)
             ))
             ->map(fn($d) => [
-                'id'     => $d->id,
-                'type'   => 'delivery',
-                'date'   => $d->delivery_date,
-                'dr'     => $d->dr_number,
-                'debit'  => (float) $d->amount,
-                'credit' => 0,
-                'notes'  => $d->notes,
-                'model'  => $d,
+                'id'          => $d->id,
+                'type'        => 'delivery',
+                'date'        => $d->delivery_date,
+                'dr'          => $d->dr_number,
+                'debit'       => (float) $d->amount,
+                'credit'      => 0,
+                'notes'       => $d->notes,
+                'po_number'   => $d->purchaseOrder?->po_number,
+                'from_po'     => $d->purchase_order_id !== null,
+                'due_date'    => $d->purchaseOrder?->expected_arrival_date,
+                'terms_count' => $d->purchaseOrder?->payment_terms_count,
+                'terms_days'  => $d->purchaseOrder?->payment_terms_days,
+                'remaining_terms' => $d->purchaseOrder?->remaining_terms,
+                'suggested_term_amount' => $d->purchaseOrder?->suggested_term_amount,
+                'model'       => $d,
             ]);
 
-        $payments = $allPayments
+        $allPayments->load('purchaseOrder');
+
+        $payments = collect($allPayments)
             ->when($search, fn($c) => $c->filter(fn($p) =>
                 str_contains(strtolower($p->reference_no ?? ''), strtolower($search)) ||
                 str_contains(strtolower($p->notes ?? ''), strtolower($search)) ||
                 str_contains($p->payment_date->format('Y-m-d'), $search) ||
-                str_contains($p->payment_date->format('M d, Y'), $search)
+                str_contains($p->payment_date->format('M d, Y'), $search) ||
+                str_contains(strtolower($p->purchaseOrder?->expected_arrival_date?->format('M d, Y') ?? ''), strtolower($search))
             ))
             ->map(fn($p) => [
-                'id'     => $p->id,
-                'type'   => 'payment',
-                'date'   => $p->payment_date,
-                'dr'     => $p->reference_no ?? '—',
-                'debit'  => 0,
-                'credit' => (float) $p->amount,
-                'notes'  => $p->notes,
-                'model'  => $p,
+                'id'        => $p->id,
+                'type'      => 'payment',
+                'date'      => $p->payment_date,
+                'dr'        => $p->reference_no ?? '—',
+                'debit'     => 0,
+                'credit'    => (float) $p->amount,
+                'notes'     => $p->notes,
+                'po_number' => $p->purchaseOrder?->po_number,
+                'from_po'   => $p->purchase_order_id !== null,
+                'due_date'    => $p->purchaseOrder?->expected_arrival_date,
+                'terms_count' => $p->purchaseOrder?->payment_terms_count,
+                'terms_days'  => $p->purchaseOrder?->payment_terms_days,
+                'remaining_terms' => $p->purchaseOrder?->remaining_terms,
+                'suggested_term_amount' => $p->purchaseOrder?->suggested_term_amount,
+                'model'     => $p,
             ]);
 
         // Merge and sort by date, then rebuild running balance on filtered set

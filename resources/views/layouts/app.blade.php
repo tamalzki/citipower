@@ -432,6 +432,18 @@
 
         .form-control::placeholder { color: #cbd5e1; }
 
+        /* Make dropdown fields visually obvious app-wide */
+        select.form-control:not([multiple]):not([size]) {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            padding-right: 34px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364758b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 14px 14px;
+        }
+
         /* ══════════════════════════════
            ALERTS
         ══════════════════════════════ */
@@ -635,18 +647,7 @@
             Stock Transfers
         </a>
 
-        @if($role === 'owner')
-        <a href="{{ route('branches.index') }}"
-           class="{{ request()->routeIs('branches.*') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                 stroke-linejoin="round" style="flex-shrink:0;">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                <polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-            Branches
-        </a>
-        @endif
+        
         @endif
 
         {{-- ── Supplier Ledger (owner only) ── --}}
@@ -666,38 +667,17 @@
         @if($role === 'owner')
         <div class="menu-label" style="margin-top:10px;">Reports</div>
 
-        <a href="{{ route('reports.sales') }}"
-           class="{{ request()->routeIs('reports.sales*') ? 'active' : '' }}">
+        <a href="{{ route('reports.hub') }}"
+           class="{{ request()->routeIs('reports.*') ? 'active' : '' }}">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
                  fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                  stroke-linejoin="round" style="flex-shrink:0;">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                <rect x="3" y="3" width="7" height="7"/>
+                <rect x="14" y="3" width="7" height="7"/>
+                <rect x="14" y="14" width="7" height="7"/>
+                <rect x="3" y="14" width="7" height="7"/>
             </svg>
-            Sales Report
-        </a>
-
-        <a href="{{ route('reports.inventory') }}"
-           class="{{ request()->routeIs('reports.inventory*') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                 stroke-linejoin="round" style="flex-shrink:0;">
-                <line x1="18" y1="20" x2="18" y2="10"/>
-                <line x1="12" y1="20" x2="12" y2="4"/>
-                <line x1="6" y1="20" x2="6" y2="14"/>
-            </svg>
-            Inventory Report
-        </a>
-
-        <a href="{{ route('reports.profit-loss') }}"
-           class="{{ request()->routeIs('reports.profit-loss*') ? 'active' : '' }}">
-            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                 stroke-linejoin="round" style="flex-shrink:0;">
-                <line x1="12" y1="20" x2="12" y2="10"/>
-                <line x1="18" y1="20" x2="18" y2="4"/>
-                <line x1="6" y1="20" x2="6" y2="14"/>
-            </svg>
-            Profit & Loss
+            Reports
         </a>
         @endif
 

@@ -9,8 +9,32 @@ use Illuminate\Http\Request;
 
 class StockTransferController extends Controller
 {
+    private function ensureFixedBranches(): array
+    {
+        $main = Branch::firstOrCreate(
+            ['code' => 'DAV-MAIN'],
+            ['name' => 'DAVAO -MAIN']
+        );
+
+        $second = Branch::firstOrCreate(
+            ['code' => 'DIG-SECOND'],
+            ['name' => 'DIGOS -SECOND']
+        );
+
+        // Keep naming fixed even if edited before
+        if ($main->name !== 'DAVAO -MAIN') {
+            $main->update(['name' => 'DAVAO -MAIN']);
+        }
+        if ($second->name !== 'DIGOS -SECOND') {
+            $second->update(['name' => 'DIGOS -SECOND']);
+        }
+
+        return [$main, $second];
+    }
+
     public function index(Request $request)
     {
+        [$mainBranch, $secondBranch] = $this->ensureFixedBranches();
         $search = $request->get('search');
 
         $transfers = StockTransfer::with(['product', 'fromBranch', 'toBranch', 'transferredBy'])
@@ -23,38 +47,90 @@ class StockTransferController extends Controller
             ->paginate(30)
             ->withQueryString();
 
-        $branches = Branch::orderBy('name')->get();
+        $products = Product::orderBy('name')
+            ->get(['id', 'name', 'sku', 'stock_quantity']);
 
-        return view('stock-transfers.index', compact('transfers', 'branches', 'search'));
+        $toSecond = StockTransfer::where('to_branch_id', $secondBranch->id)
+            ->selectRaw('product_id, SUM(quantity) as qty')
+            ->groupBy('product_id')
+            ->pluck('qty', 'product_id');
+
+        $fromSecond = StockTransfer::where('from_branch_id', $secondBranch->id)
+            ->selectRaw('product_id, SUM(quantity) as qty')
+            ->groupBy('product_id')
+            ->pluck('qty', 'product_id');
+
+        $branchStocks = $products->map(function ($p) use ($toSecond, $fromSecond) {
+            $secondQty = max(0, (int) ($toSecond[$p->id] ?? 0) - (int) ($fromSecond[$p->id] ?? 0));
+            $mainQty = (int) $p->stock_quantity;
+            return [
+                'product' => $p,
+                'main_qty' => $mainQty,
+                'second_qty' => $secondQty,
+                'total_qty' => $mainQty + $secondQty,
+            ];
+        });
+
+        $branchTotals = [
+            'main' => $branchStocks->sum('main_qty'),
+            'second' => $branchStocks->sum('second_qty'),
+            'all' => $branchStocks->sum('total_qty'),
+        ];
+
+        $mainBranchProducts = $branchStocks->map(fn ($row) => [
+            'name' => $row['product']->name,
+            'sku' => $row['product']->sku,
+            'qty' => $row['main_qty'],
+        ])->sortBy('name')->values();
+
+        $secondBranchProducts = $branchStocks->map(fn ($row) => [
+            'name' => $row['product']->name,
+            'sku' => $row['product']->sku,
+            'qty' => $row['second_qty'],
+        ])->sortBy('name')->values();
+
+        return view('stock-transfers.index', compact(
+            'transfers',
+            'search',
+            'mainBranch',
+            'secondBranch',
+            'branchStocks',
+            'branchTotals',
+            'mainBranchProducts',
+            'secondBranchProducts'
+        ));
     }
 
     public function create()
     {
-        $branches = Branch::orderBy('name')->get();
+        [$mainBranch, $secondBranch] = $this->ensureFixedBranches();
         $products = Product::orderBy('name')->get();
-        return view('stock-transfers.create', compact('branches', 'products'));
+        return view('stock-transfers.create', compact('products', 'mainBranch', 'secondBranch'));
     }
 
     public function store(Request $request)
     {
+        [$mainBranch, $secondBranch] = $this->ensureFixedBranches();
+
         $request->validate([
-            'product_id'     => 'required|exists:products,id',
-            'from_branch_id' => 'required|exists:branches,id',
-            'to_branch_id'   => 'required|exists:branches,id|different:from_branch_id',
-            'quantity'       => 'required|integer|min:1',
+            'items'                  => 'required|array|min:1',
+            'items.*.product_id'     => 'required|distinct|exists:products,id',
+            'items.*.quantity'       => 'required|integer|min:1',
             'note'           => 'nullable|string|max:500',
         ]);
 
-        StockTransfer::create([
-            'product_id'     => $request->product_id,
-            'from_branch_id' => $request->from_branch_id,
-            'to_branch_id'   => $request->to_branch_id,
-            'quantity'       => $request->quantity,
-            'note'           => $request->note,
-            'transferred_by' => auth()->id(),
-        ]);
+        foreach ($request->items as $item) {
+            StockTransfer::create([
+                'product_id'     => $item['product_id'],
+                'from_branch_id' => $mainBranch->id,
+                'to_branch_id'   => $secondBranch->id,
+                'quantity'       => (int) $item['quantity'],
+                'note'           => $request->note,
+                'transferred_by' => auth()->id(),
+            ]);
+        }
 
         return redirect()->route('stock-transfers.index')
-            ->with('success', 'Stock transfer recorded successfully.');
+            ->with('success', 'Stock transfer(s) recorded successfully.');
     }
 }

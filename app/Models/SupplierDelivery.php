@@ -8,6 +8,7 @@ class SupplierDelivery extends Model
 {
     protected $fillable = [
         'supplier_id',
+        'purchase_order_id',
         'dr_number',
         'delivery_date',
         'amount',
@@ -22,5 +23,10 @@ class SupplierDelivery extends Model
     public function supplier()
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    public function purchaseOrder()
+    {
+        return $this->belongsTo(PurchaseOrder::class);
     }
 }

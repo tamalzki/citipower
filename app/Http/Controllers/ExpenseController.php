@@ -10,28 +10,30 @@ class ExpenseController extends Controller
 {
     public function index(Request $request)
     {
-        $categoryId = $request->input('category_id');
-        $dateFrom = $request->input('date_from');
-        $dateTo = $request->input('date_to');
+        $search = trim($request->input('search', ''));
 
         $expenses = Expense::with('category')
-            ->when($categoryId, fn ($query) => $query->where('expense_category_id', $categoryId))
-            ->when($dateFrom, fn ($query) => $query->whereDate('expense_date', '>=', $dateFrom))
-            ->when($dateTo, fn ($query) => $query->whereDate('expense_date', '<=', $dateTo))
+            ->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
+                $q2->where('vendor', 'like', "%{$search}%")
+                   ->orWhere('description', 'like', "%{$search}%")
+                   ->orWhere('reference_no', 'like', "%{$search}%")
+                   ->orWhereHas('category', fn ($c) => $c->where('name', 'like', "%{$search}%"));
+            }))
             ->orderByDesc('expense_date')
             ->orderByDesc('id')
             ->paginate(20)
             ->withQueryString();
 
-        $categories = ExpenseCategory::orderBy('name')->get();
-
         $totalAmount = Expense::query()
-            ->when($categoryId, fn ($query) => $query->where('expense_category_id', $categoryId))
-            ->when($dateFrom, fn ($query) => $query->whereDate('expense_date', '>=', $dateFrom))
-            ->when($dateTo, fn ($query) => $query->whereDate('expense_date', '<=', $dateTo))
+            ->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
+                $q2->where('vendor', 'like', "%{$search}%")
+                   ->orWhere('description', 'like', "%{$search}%")
+                   ->orWhere('reference_no', 'like', "%{$search}%")
+                   ->orWhereHas('category', fn ($c) => $c->where('name', 'like', "%{$search}%"));
+            }))
             ->sum('amount');
 
-        return view('expenses.index', compact('expenses', 'categories', 'totalAmount', 'categoryId', 'dateFrom', 'dateTo'));
+        return view('expenses.index', compact('expenses', 'totalAmount', 'search'));
     }
 
     public function create()

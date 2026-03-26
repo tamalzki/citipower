@@ -1,256 +1,421 @@
 @extends('layouts.app')
 @section('title', $supplier->name . ' — Ledger')
+
 @section('content')
-    <div class="page-header">
-        <div>
-            <h2>{{ $supplier->name }}</h2>
-            <p>Supplier Ledger — Deliveries & Payments</p>
+<style>
+/* ── KPI row ── */
+.sl-kpi-row {
+    display: flex;
+    gap: 0;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 6px rgba(15,23,42,.06);
+    margin-bottom: 16px;
+}
+.sl-kpi-cell {
+    flex: 1;
+    padding: 14px 22px;
+    border-right: 1px solid #f1f5f9;
+    min-width: 0;
+}
+.sl-kpi-cell:last-child { border-right: none; }
+.sl-kpi-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: #94a3b8;
+    margin-bottom: 4px;
+}
+.sl-kpi-value {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+/* ── Ledger card ── */
+.sl-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 6px rgba(15,23,42,.06);
+}
+.sl-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.sl-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sl-table thead th {
+    background: #1e293b;
+    color: #fff;
+    padding: 10px 13px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    white-space: nowrap;
+    text-align: left;
+}
+.sl-table thead th.r { text-align: right; }
+.sl-table tbody td {
+    padding: 10px 13px;
+    border-bottom: 1px solid #f8fafc;
+    vertical-align: middle;
+}
+.sl-table tbody tr:hover { background: #f9fafb; }
+.sl-table tfoot td {
+    background: #0f172a;
+    color: #fff;
+    font-weight: 700;
+    padding: 10px 13px;
+}
+.sl-table tfoot td.r { text-align: right; }
+
+.dr-badge { font-weight: 700; color: #1d4ed8; font-size: 13px; }
+.po-pill {
+    display: inline-block;
+    margin-top: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #7c3aed;
+    background: #f3e8ff;
+    border-radius: 20px;
+    padding: 1px 8px;
+    text-decoration: none;
+}
+.po-pill:hover { background: #ede9fe; }
+.debit  { font-weight: 700; color: #dc2626; }
+.credit { font-weight: 700; color: #16a34a; }
+.bal-owe  { font-weight: 700; color: #dc2626; }
+.bal-ok   { font-weight: 700; color: #16a34a; }
+.muted    { color: #cbd5e1; }
+.via-po-tag { font-size: 10px; color: #94a3b8; font-style: italic; }
+</style>
+
+{{-- ── Supplier header ── --}}
+<div style="display:flex; align-items:flex-start; justify-content:space-between;
+            flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+    <div>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <a href="{{ route('supplier-ledger.index') }}"
+               style="font-size:13px; color:#64748b; text-decoration:none; font-weight:600;">
+                ← All Suppliers
+            </a>
+            <span style="color:#cbd5e1;">/</span>
+            <h2 style="margin:0; font-size:20px; font-weight:800; color:#0f172a;">
+                {{ $supplier->name }}
+            </h2>
+            @if($balance > 0)
+                <span style="background:#fee2e2; color:#dc2626; font-size:11px; font-weight:700;
+                             border-radius:20px; padding:2px 10px;">Unpaid</span>
+            @else
+                <span style="background:#dcfce7; color:#16a34a; font-size:11px; font-weight:700;
+                             border-radius:20px; padding:2px 10px;">✓ Settled</span>
+            @endif
         </div>
-        <div style="display:flex; gap:8px;">
-            <button onclick="document.getElementById('delivery-modal').style.display='flex'"
-                    class="btn btn-secondary">+ Add Delivery (DR)</button>
-            <button onclick="document.getElementById('payment-modal').style.display='flex'"
-                    class="btn btn-primary">+ Record Payment</button>
-            <a href="{{ route('supplier-ledger.index') }}" class="btn btn-secondary">← Back</a>
+        @if($supplier->contact_person || $supplier->phone)
+        <p style="margin:4px 0 0; font-size:12px; color:#64748b;">
+            {{ implode(' · ', array_filter([$supplier->contact_person, $supplier->phone])) }}
+        </p>
+        @endif
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button onclick="document.getElementById('delivery-modal').style.display='flex'"
+                class="btn btn-secondary">+ Add Delivery (DR)</button>
+        <button onclick="document.getElementById('payment-modal').style.display='flex'"
+                class="btn btn-primary">+ Record Payment</button>
+    </div>
+</div>
+
+@if(session('success'))
+    <div class="alert alert-success" style="margin-bottom:12px;">{{ session('success') }}</div>
+@endif
+
+{{-- ── KPI Row ── --}}
+<div class="sl-kpi-row">
+    <div class="sl-kpi-cell">
+        <div class="sl-kpi-label">Total Delivered</div>
+        <div class="sl-kpi-value" style="color:#dc2626;">₱{{ number_format($totalDelivered, 2) }}</div>
+    </div>
+    <div class="sl-kpi-cell">
+        <div class="sl-kpi-label">Total Paid</div>
+        <div class="sl-kpi-value" style="color:#16a34a;">₱{{ number_format($totalPaid, 2) }}</div>
+    </div>
+    <div class="sl-kpi-cell" style="background:{{ $balance > 0 ? '#fff7f7' : '#f0fdf4' }};">
+        <div class="sl-kpi-label">Outstanding Balance</div>
+        <div class="sl-kpi-value {{ $balance > 0 ? 'bal-owe' : 'bal-ok' }}">
+            ₱{{ number_format($balance, 2) }}
         </div>
     </div>
+</div>
 
-    <div class="card">
-        <div class="card-body">
-            <form method="GET" style="display:flex; gap:10px; align-items:center;">
-                <input type="text" name="search" class="form-control"
-                       value="{{ $search ?? '' }}"
-                       placeholder="Search DR number, date (e.g. 2025-01), notes..."
-                       style="flex:1; max-width:420px;">
-                <button type="submit" class="btn btn-primary">Search</button>
-                @if(!empty($search))
-                    <a href="{{ route('supplier-ledger.show', $supplier) }}" class="btn btn-secondary">Clear</a>
-                @endif
-            </form>
-        </div>
+{{-- ── Ledger Table ── --}}
+<div class="sl-card">
+
+    {{-- Toolbar: search --}}
+    <div class="sl-toolbar">
+        <span style="font-size:13px; font-weight:700; color:#0f172a;">
+            Transaction Ledger
+            @if($entries->count())
+                <span style="font-size:12px; font-weight:500; color:#94a3b8; margin-left:4px;">
+                    ({{ $entries->count() }} records)
+                </span>
+            @endif
+        </span>
+        <form method="GET" style="display:flex; gap:8px; align-items:center;">
+            <input type="text" name="search" class="form-control"
+                   value="{{ $search }}"
+                   placeholder="Search DR, date (2025-01), notes…"
+                   style="width:280px;">
+            <button type="submit" class="btn btn-primary">Search</button>
+            @if($search)
+                <a href="{{ route('supplier-ledger.show', $supplier) }}" class="btn btn-secondary">Clear</a>
+            @endif
+        </form>
     </div>
 
-    {{-- Summary Cards --}}
-    <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
-        <div class="stat-card">
-            <div class="stat-icon-box icon-blue">📦</div>
-            <div class="stat-info">
-                <div class="stat-number">₱{{ number_format($totalDelivered, 2) }}</div>
-                <div class="stat-label">Total Delivered</div>
-            </div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon-box icon-green">💳</div>
-            <div class="stat-info">
-                <div class="stat-number" style="color:#16a34a;">₱{{ number_format($totalPaid, 2) }}</div>
-                <div class="stat-label">Total Paid</div>
-            </div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-icon-box icon-red">⚖️</div>
-            <div class="stat-info">
-                <div class="stat-number" style="color:{{ $balance > 0 ? '#dc2626' : '#16a34a' }}; font-size:22px;">
-                    ₱{{ number_format($balance, 2) }}
-                </div>
-                <div class="stat-label">Outstanding Balance</div>
-            </div>
-        </div>
-    </div>
+    <div style="overflow-x:auto;">
+        <table class="sl-table">
+            <thead>
+                <tr>
+                    <th style="width:105px;">Date</th>
+                    <th>DR</th>
+                    <th>Type</th>
+                    <th>Due / Terms</th>
+                    <th class="r">Amount</th>
+                    <th class="r">Running Balance</th>
+                    <th>Notes</th>
+                    <th style="width:50px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse($entries as $entry)
+                <tr style="{{ $entry['type'] === 'payment' ? 'background:#f7fef9;' : '' }}">
 
-    {{-- Ledger Table --}}
-    <div class="card">
-        <div class="card-title">Transaction Ledger</div>
-        <div class="table-wrapper">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Type</th>
-                        <th>DR / Reference</th>
-                        <th>Debit (Delivery)</th>
-                        <th>Credit (Payment)</th>
-                        <th>Running Balance</th>
-                        <th>Notes</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($entries as $entry)
-                    <tr style="{{ $entry['type'] === 'payment' ? 'background:#f0fdf4;' : '' }}">
-                        <td style="white-space:nowrap; font-weight:600;">
-                            {{ \Carbon\Carbon::parse($entry['date'])->format('M d, Y') }}
-                        </td>
-                        <td>
-                            @if($entry['type'] === 'delivery')
+                    <td style="font-weight:600; font-size:12px; white-space:nowrap; color:#374151;">
+                        {{ \Carbon\Carbon::parse($entry['date'])->format('m/d/Y') }}
+                    </td>
+
+                    <td>
+                        <span class="dr-badge">{{ $entry['dr'] ?: '—' }}</span>
+                    </td>
+
+                    <td>
+                        @if($entry['type'] === 'delivery')
+                            @if(!empty($entry['from_po']))
+                                <span class="badge badge-info">PO Delivery</span>
+                            @else
                                 <span class="badge badge-info">Delivery</span>
+                            @endif
+                        @else
+                            @if(!empty($entry['from_po']))
+                                <span class="badge badge-success">PO Payment</span>
                             @else
                                 <span class="badge badge-success">Payment</span>
                             @endif
-                        </td>
-                        <td style="font-weight:600; color:#2563eb;">{{ $entry['dr'] }}</td>
-                        <td style="font-weight:{{ $entry['debit'] > 0 ? '700' : '400' }}; color:{{ $entry['debit'] > 0 ? '#dc2626' : '#94a3b8' }};">
-                            {{ $entry['debit'] > 0 ? '₱' . number_format($entry['debit'], 2) : '—' }}
-                        </td>
-                        <td style="font-weight:{{ $entry['credit'] > 0 ? '700' : '400' }}; color:{{ $entry['credit'] > 0 ? '#16a34a' : '#94a3b8' }};">
-                            {{ $entry['credit'] > 0 ? '₱' . number_format($entry['credit'], 2) : '—' }}
-                        </td>
-                        <td style="font-weight:700; color:{{ $entry['running_balance'] > 0 ? '#dc2626' : '#16a34a' }};">
-                            ₱{{ number_format($entry['running_balance'], 2) }}
-                        </td>
-                        <td style="font-size:12px; color:#64748b; max-width:200px;">{{ $entry['notes'] ?: '—' }}</td>
-                        <td>
-                            @if($entry['type'] === 'delivery')
+                        @endif
+                    </td>
+
+                    <td style="font-size:11px; color:#64748b; white-space:nowrap;">
+                        @if(!empty($entry['from_po']) && !empty($entry['due_date']))
+                            <div><strong style="color:#92400e;">Due:</strong> {{ \Carbon\Carbon::parse($entry['due_date'])->format('M d, Y') }}</div>
+                            @if(!empty($entry['terms_count']))
+                                <div>
+                                    {{ (int) ($entry['remaining_terms'] ?? 0) }}/{{ (int) $entry['terms_count'] }} term(s)
+                                    @if(!empty($entry['terms_days'])) · {{ (int) $entry['terms_days'] }} days @endif
+                                </div>
+                            @endif
+                            @if(($entry['type'] === 'payment') && !empty($entry['suggested_term_amount']))
+                                <div>Suggested: ₱{{ number_format((float) $entry['suggested_term_amount'], 2) }}</div>
+                            @endif
+                        @else
+                            <span class="muted">—</span>
+                        @endif
+                    </td>
+
+                    <td style="text-align:right;">
+                        @if($entry['type'] === 'delivery')
+                            <span class="debit">₱{{ number_format($entry['debit'], 2) }}</span>
+                        @else
+                            <span class="credit">-₱{{ number_format($entry['credit'], 2) }}</span>
+                        @endif
+                    </td>
+
+                    <td style="text-align:right;">
+                        <span class="{{ $entry['running_balance'] >= 0 ? 'bal-owe' : 'bal-ok' }}">
+                            {{ $entry['running_balance'] < 0 ? '-₱' : '₱' }}{{ number_format(abs($entry['running_balance']), 2) }}
+                        </span>
+                    </td>
+
+                    <td style="font-size:11px; color:#64748b; max-width:180px; word-break:break-word;">
+                        {{ $entry['notes'] ?: '—' }}
+                    </td>
+
+                    <td style="text-align:center;">
+                        @if($entry['type'] === 'delivery')
+                            @if(empty($entry['from_po']))
                                 <form action="{{ route('supplier-ledger.destroy-delivery', [$supplier, $entry['model']]) }}"
-                                      method="POST" onsubmit="return confirm('Delete this delivery record?')">
+                                      method="POST" onsubmit="return confirm('Delete this delivery?')">
                                     @csrf @method('DELETE')
                                     <button class="btn btn-danger btn-sm">✕</button>
                                 </form>
                             @else
+                                <span class="via-po-tag">via PO</span>
+                            @endif
+                        @else
+                            @if(empty($entry['from_po']))
                                 <form action="{{ route('supplier-ledger.destroy-payment', [$supplier, $entry['model']]) }}"
-                                      method="POST" onsubmit="return confirm('Delete this payment record?')">
+                                      method="POST" onsubmit="return confirm('Delete this payment?')">
                                     @csrf @method('DELETE')
                                     <button class="btn btn-danger btn-sm">✕</button>
                                 </form>
+                            @else
+                                <span class="via-po-tag">via PO</span>
                             @endif
-                        </td>
-                    </tr>
-                    @empty
-                    <tr>
-                        <td colspan="8" style="text-align:center; padding:30px; color:#94a3b8;">
-                            No transactions recorded yet. Add a delivery or payment above.
-                        </td>
-                    </tr>
-                    @endforelse
-                </tbody>
-                @if($entries->count() > 0)
-                <tfoot>
-                    <tr style="background:#f8fafc; font-weight:700;">
-                        <td colspan="3" style="padding:10px 12px; color:#64748b;">TOTAL</td>
-                        <td style="padding:10px 12px; color:#dc2626;">₱{{ number_format($totalDelivered, 2) }}</td>
-                        <td style="padding:10px 12px; color:#16a34a;">₱{{ number_format($totalPaid, 2) }}</td>
-                        <td style="padding:10px 12px; color:{{ $balance > 0 ? '#dc2626' : '#16a34a' }}; font-size:16px;">
-                            ₱{{ number_format($balance, 2) }}
-                        </td>
-                        <td colspan="2"></td>
-                    </tr>
-                </tfoot>
-                @endif
-            </table>
-        </div>
+                        @endif
+                    </td>
+                </tr>
+                @empty
+                <tr>
+                    <td colspan="8" style="text-align:center; padding:50px 20px; color:#94a3b8;">
+                        <div style="font-size:32px; margin-bottom:8px;">📋</div>
+                        No transactions yet. Add a delivery or record a payment above.
+                    </td>
+                </tr>
+                @endforelse
+            </tbody>
+            @if($entries->count() > 0)
+            <tfoot>
+                <tr>
+                    <td colspan="3" style="font-size:11px; letter-spacing:.5px; color:#94a3b8;">TOTAL</td>
+                    <td class="r" style="color:#fca5a5;">₱{{ number_format($totalDelivered - $totalPaid, 2) }}</td>
+                    <td class="r" style="font-size:15px; color:{{ $balance > 0 ? '#fca5a5' : '#86efac' }};">
+                        ₱{{ number_format($balance, 2) }}
+                    </td>
+                    <td colspan="3"></td>
+                </tr>
+            </tfoot>
+            @endif
+        </table>
     </div>
+</div>
 
-    {{-- ── Add Delivery Modal ── --}}
-    <div id="delivery-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5);
-         z-index:1000; align-items:center; justify-content:center; padding:20px;">
-        <div style="background:#fff; border-radius:12px; padding:28px; width:100%; max-width:460px;
-                    box-shadow:0 20px 60px rgba(0,0,0,.2);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <h3 style="margin:0; font-size:16px;">Add Delivery (DR)</h3>
-                <button onclick="document.getElementById('delivery-modal').style.display='none'"
-                        style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748b;">✕</button>
+{{-- ── Add Delivery Modal ── --}}
+<div id="delivery-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,.5);
+     z-index:1000; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:#fff; border-radius:14px; width:100%; max-width:460px;
+                box-shadow:0 20px 60px rgba(15,23,42,.22); overflow:hidden;">
+        <div style="display:flex; justify-content:space-between; align-items:center;
+                    padding:18px 22px 14px; border-bottom:1px solid #f1f5f9;">
+            <div>
+                <div style="font-size:15px; font-weight:700; color:#0f172a;">Add Delivery (DR)</div>
+                <div style="font-size:12px; color:#64748b; margin-top:2px;">{{ $supplier->name }}</div>
             </div>
-            <form action="{{ route('supplier-ledger.store-delivery', $supplier) }}" method="POST">
-                @csrf
-                <div class="form-group">
-                    <label>DR Number *</label>
-                    <input type="text" name="dr_number" class="form-control"
-                           placeholder="e.g. #97861" required>
-                </div>
-                <div class="form-group">
-                    <label>Delivery Date *</label>
-                    <input type="date" name="delivery_date" class="form-control"
-                           value="{{ now()->toDateString() }}" required>
-                </div>
-                <div class="form-group">
-                    <label>Amount (₱) *</label>
-                    <input type="number" name="amount" class="form-control"
-                           placeholder="0.00" step="0.01" min="0.01" required>
-                </div>
-                <div class="form-group">
-                    <label>Notes <span style="color:#94a3b8; font-weight:400;">(Optional)</span></label>
-                    <textarea name="notes" class="form-control" rows="2"
-                              placeholder="e.g. Delivered to main branch"></textarea>
-                </div>
-                <div style="display:flex; gap:8px; margin-top:4px;">
-                    <button type="submit" class="btn btn-primary" style="flex:1;">Save Delivery</button>
-                    <button type="button" onclick="document.getElementById('delivery-modal').style.display='none'"
-                            class="btn btn-secondary">Cancel</button>
-                </div>
-            </form>
+            <button onclick="document.getElementById('delivery-modal').style.display='none'"
+                    style="background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8;">✕</button>
         </div>
+        <form action="{{ route('supplier-ledger.store-delivery', $supplier) }}" method="POST"
+              style="padding:18px 22px;">
+            @csrf
+            <div class="form-group">
+                <label>DR Number *</label>
+                <input type="text" name="dr_number" class="form-control" placeholder="e.g. #97861" required>
+            </div>
+            <div class="form-group">
+                <label>Delivery Date *</label>
+                <input type="date" name="delivery_date" class="form-control" value="{{ now()->toDateString() }}" required>
+            </div>
+            <div class="form-group">
+                <label>Amount (₱) *</label>
+                <input type="number" name="amount" class="form-control" placeholder="0.00" step="0.01" min="0.01" required>
+            </div>
+            <div class="form-group">
+                <label>Notes <span style="color:#94a3b8; font-weight:400;">(Optional)</span></label>
+                <textarea name="notes" class="form-control" rows="2" placeholder="e.g. Delivered to main branch"></textarea>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:6px;">
+                <button type="submit" class="btn btn-primary" style="flex:1;">Save Delivery</button>
+                <button type="button" onclick="document.getElementById('delivery-modal').style.display='none'"
+                        class="btn btn-secondary">Cancel</button>
+            </div>
+        </form>
     </div>
+</div>
 
-    {{-- ── Record Payment Modal ── --}}
-    <div id="payment-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5);
-         z-index:1000; align-items:center; justify-content:center; padding:20px;">
-        <div style="background:#fff; border-radius:12px; padding:28px; width:100%; max-width:460px;
-                    box-shadow:0 20px 60px rgba(0,0,0,.2);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <div>
-                    <h3 style="margin:0; font-size:16px;">Record Payment to Supplier</h3>
+{{-- ── Record Payment Modal ── --}}
+<div id="payment-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,.5);
+     z-index:1000; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:#fff; border-radius:14px; width:100%; max-width:460px;
+                box-shadow:0 20px 60px rgba(15,23,42,.22); overflow:hidden;">
+        <div style="display:flex; justify-content:space-between; align-items:center;
+                    padding:18px 22px 14px; border-bottom:1px solid #f1f5f9;">
+            <div>
+                <div style="font-size:15px; font-weight:700; color:#0f172a;">Record Payment</div>
+                <div style="font-size:12px; color:#64748b; margin-top:2px;">
+                    {{ $supplier->name }}
                     @if($balance > 0)
-                    <p style="margin:4px 0 0; font-size:12px; color:#dc2626;">
-                        Outstanding: ₱{{ number_format($balance, 2) }}
-                    </p>
+                        &nbsp;·&nbsp;
+                        <span style="color:#dc2626; font-weight:600;">Outstanding: ₱{{ number_format($balance, 2) }}</span>
                     @endif
                 </div>
-                <button onclick="document.getElementById('payment-modal').style.display='none'"
-                        style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748b;">✕</button>
             </div>
-            <form action="{{ route('supplier-ledger.store-payment', $supplier) }}" method="POST">
-                @csrf
-                <div class="form-group">
-                    <label>Payment Date *</label>
-                    <input type="date" name="payment_date" class="form-control"
-                           value="{{ now()->toDateString() }}" required>
-                </div>
-                <div class="form-group">
-                    <label>Amount (₱) *</label>
-                    <input type="number" name="amount" class="form-control"
-                           placeholder="0.00" step="0.01" min="0.01"
-                           value="{{ $balance > 0 ? number_format($balance, 2, '.', '') : '' }}" required>
-                </div>
-                <div class="form-group">
-                    <label>Payment Method *</label>
-                    <select name="payment_method" class="form-control">
-                        <option value="cash">Cash</option>
-                        <option value="check">Check</option>
-                        <option value="bank_transfer">Bank Transfer</option>
-                        <option value="e_wallet">E-Wallet</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Reference No <span style="color:#94a3b8; font-weight:400;">(Optional)</span></label>
-                    <input type="text" name="reference_no" class="form-control" placeholder="Check/transfer reference">
-                </div>
-                <div class="form-group">
-                    <label>Notes <span style="color:#94a3b8; font-weight:400;">(Optional)</span></label>
-                    <textarea name="notes" class="form-control" rows="2"></textarea>
-                </div>
-                <div style="display:flex; gap:8px; margin-top:4px;">
-                    <button type="submit" class="btn btn-primary" style="flex:1;">Save Payment</button>
-                    <button type="button" onclick="document.getElementById('payment-modal').style.display='none'"
-                            class="btn btn-secondary">Cancel</button>
-                </div>
-            </form>
+            <button onclick="document.getElementById('payment-modal').style.display='none'"
+                    style="background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8;">✕</button>
         </div>
+        <form action="{{ route('supplier-ledger.store-payment', $supplier) }}" method="POST"
+              style="padding:18px 22px;">
+            @csrf
+            <div class="form-group">
+                <label>Payment Date *</label>
+                <input type="date" name="payment_date" class="form-control" value="{{ now()->toDateString() }}" required>
+            </div>
+            <div class="form-group">
+                <label>Amount (₱) *</label>
+                <input type="number" name="amount" class="form-control" placeholder="0.00" step="0.01" min="0.01"
+                       value="{{ $balance > 0 ? number_format($balance, 2, '.', '') : '' }}" required>
+            </div>
+            <div class="form-group">
+                <label>Payment Method *</label>
+                <select name="payment_method" class="form-control">
+                    <option value="cash">Cash</option>
+                    <option value="check">Check</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="e_wallet">E-Wallet</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Reference No <span style="color:#94a3b8; font-weight:400;">(Optional)</span></label>
+                <input type="text" name="reference_no" class="form-control" placeholder="Check/transfer reference">
+            </div>
+            <div class="form-group">
+                <label>Notes <span style="color:#94a3b8; font-weight:400;">(Optional)</span></label>
+                <textarea name="notes" class="form-control" rows="2"></textarea>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:6px;">
+                <button type="submit" class="btn btn-primary" style="flex:1;">Save Payment</button>
+                <button type="button" onclick="document.getElementById('payment-modal').style.display='none'"
+                        class="btn btn-secondary">Cancel</button>
+            </div>
+        </form>
     </div>
+</div>
 
-    {{-- Show modal if validation errors --}}
-    @if($errors->any())
-    <script>
-        // Re-open whichever modal had the error based on session intent
-        // Both modals will show validation errors via flash — simpler to just reopen last
-    </script>
-    @endif
-
-    <script>
-    // Close modals on backdrop click
-    ['delivery-modal','payment-modal'].forEach(id => {
-        document.getElementById(id).addEventListener('click', function(e) {
-            if (e.target === this) this.style.display = 'none';
-        });
+<script>
+['delivery-modal','payment-modal'].forEach(function(id) {
+    document.getElementById(id).addEventListener('click', function(e) {
+        if (e.target === this) this.style.display = 'none';
     });
-    </script>
+});
+</script>
+
 @endsection

@@ -126,17 +126,30 @@
             <div class="form-group" style="margin-bottom:0;">
                 <label>Order Date *</label>
                 <input type="date" name="order_date" id="order_date" class="form-control"
-                       value="{{ now()->toDateString() }}" required>
+                       value="{{ old('order_date', now()->toDateString()) }}" required>
             </div>
             <div class="form-group" style="margin-bottom:0;">
-                <label>Expected Arrival</label>
+                <label>Expected Arrival / Payment Due Date</label>
                 <input type="date" name="expected_arrival_date" class="form-control"
                        value="{{ old('expected_arrival_date') }}">
+            </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px;">
+            <div class="form-group" style="margin-bottom:0;">
+                <label>Payment Series (Terms Count)</label>
+                <input type="number" name="payment_terms_count" min="1" max="60" class="form-control"
+                       value="{{ old('payment_terms_count') }}" placeholder="e.g. 4">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label>Payment Window (Days)</label>
+                <input type="number" name="payment_terms_days" min="1" max="3650" class="form-control"
+                       value="{{ old('payment_terms_days', 90) }}" placeholder="e.g. 90">
             </div>
         </div>
         <div class="form-group" style="margin-top:14px; margin-bottom:0;">
             <label>Note / Reference</label>
             <input type="text" name="note" class="form-control"
+                   value="{{ old('note') }}"
                    placeholder="e.g. Urgent restock for extension cords" maxlength="255">
         </div>
     </div>
@@ -232,7 +245,7 @@
                     <span id="sum-date" style="font-weight:600; color:#0f172a;">{{ now()->format('M d, Y') }}</span>
                 </div>
                 <div class="summary-row">
-                    <span class="label">Expected</span>
+                    <span class="label">Due date</span>
                     <span id="sum-expected" style="font-weight:600; color:#64748b;">—</span>
                 </div>
                 <div class="summary-row">

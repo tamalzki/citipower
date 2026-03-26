@@ -71,22 +71,22 @@
 </div>
 
 {{-- ── KPI row 2 ── --}}
+@if(in_array($role, ['owner', 'cashier']))
 <div class="stats-grid">
     <div class="stat-card">
         <div class="stat-icon-box icon-blue">🧮</div>
         <div class="stat-info">
             <div class="stat-number">{{ number_format($totalStockUnits) }}</div>
-            <div class="stat-label">Total Stock Units</div>
+            <div class="stat-label">Main Branch Units</div>
         </div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon-box icon-red">⛔</div>
+        <div class="stat-icon-box icon-green">🏪</div>
         <div class="stat-info">
-            <div class="stat-number">{{ number_format($outOfStockCount) }}</div>
-            <div class="stat-label">Out of Stock</div>
+            <div class="stat-number">{{ number_format($secondBranchUnits ?? 0) }}</div>
+            <div class="stat-label">Second Branch Units</div>
         </div>
     </div>
-    @if(in_array($role, ['owner', 'cashier']))
     <div class="stat-card">
         <div class="stat-icon-box icon-green">📈</div>
         <div class="stat-info">
@@ -101,8 +101,25 @@
             <div class="stat-label">Expenses This Month</div>
         </div>
     </div>
-    @endif
 </div>
+@else
+<div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
+    <div class="stat-card">
+        <div class="stat-icon-box icon-blue">🏭</div>
+        <div class="stat-info">
+            <div class="stat-number">{{ number_format($mainBranchUnits ?? $totalStockUnits) }}</div>
+            <div class="stat-label">DAVAO -MAIN Units</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon-box icon-green">🏪</div>
+        <div class="stat-info">
+            <div class="stat-number">{{ number_format($secondBranchUnits ?? 0) }}</div>
+            <div class="stat-label">DIGOS -SECOND Units</div>
+        </div>
+    </div>
+</div>
+@endif
 
 {{-- ── Quick Navigation ── --}}
 <div class="card">
@@ -118,12 +135,65 @@
             <a href="{{ route('inventory-logs.index') }}"   class="btn btn-secondary" style="justify-content:flex-start;">📚 Inventory Logs</a>
         @endif
         @if($role === 'owner')
+            <a href="{{ route('reports.hub') }}"            class="btn btn-secondary" style="justify-content:flex-start;">🧭 Reports</a>
             <a href="{{ route('reports.sales') }}"          class="btn btn-secondary" style="justify-content:flex-start;">📈 Sales Report</a>
             <a href="{{ route('reports.inventory') }}"      class="btn btn-secondary" style="justify-content:flex-start;">📊 Inventory Report</a>
             <a href="{{ route('reports.profit-loss') }}"    class="btn btn-secondary" style="justify-content:flex-start;">💹 Profit &amp; Loss</a>
+            <a href="{{ route('supplier-ledger.index') }}"  class="btn btn-secondary" style="justify-content:flex-start;">📒 Supplier Ledger</a>
         @endif
         <a href="{{ route('profile.edit') }}" class="btn btn-secondary" style="justify-content:flex-start;">👤 My Profile</a>
     </div>
+</div>
+
+{{-- ── Alerts ── --}}
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+    <div class="card" style="margin-bottom:0; border-color:#fde68a; background:#fffbeb;">
+        <div class="card-title" style="color:#92400e;">⚠️ Low Stock Alert (Reorder)</div>
+        <div class="card-body" style="padding-top:10px;">
+            @if(($lowStockProducts ?? collect())->count())
+                @foreach($lowStockProducts as $p)
+                    <div style="display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid #fef3c7;">
+                        <div style="font-size:12px; color:#78350f; font-weight:600;">{{ $p->name }}</div>
+                        <div style="font-size:12px; color:#92400e;">
+                            {{ $p->stock_quantity }} / min {{ $p->minimum_stock }}
+                        </div>
+                    </div>
+                @endforeach
+                @if(in_array($role, ['owner', 'inventory']))
+                    <a href="{{ route('purchase-orders.create') }}" class="btn btn-warning btn-sm" style="margin-top:10px;">Create Purchase Order</a>
+                @endif
+            @else
+                <div style="font-size:12px; color:#a16207;">No low-stock products right now.</div>
+            @endif
+        </div>
+    </div>
+
+    @if($role === 'owner')
+    <div class="card" style="margin-bottom:0; border-color:#fecaca; background:#fff7f7;">
+        <div class="card-title" style="color:#991b1b;">🗓️ Payment Due Soon (14 days)</div>
+        <div class="card-body" style="padding-top:10px;">
+            @if(($paymentDueAlerts ?? collect())->count())
+                @foreach($paymentDueAlerts as $po)
+                    @php($daysLeft = now()->startOfDay()->diffInDays($po->expected_arrival_date->startOfDay(), false))
+                    <div style="display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid #fee2e2;">
+                        <div style="font-size:12px; color:#7f1d1d;">
+                            <a href="{{ route('purchase-orders.show', $po) }}" style="color:#b91c1c; font-weight:700; text-decoration:none;">
+                                {{ $po->supplier?->name ?? 'Supplier' }}
+                            </a>
+                            <div style="font-size:11px; color:#991b1b;">Due {{ $po->expected_arrival_date->format('M d, Y') }}</div>
+                        </div>
+                        <div style="font-size:12px; text-align:right;">
+                            <div style="font-weight:700; color:#dc2626;">₱{{ number_format($po->payment_balance, 2) }}</div>
+                            <div style="color:#991b1b;">{{ $daysLeft }} day(s)</div>
+                        </div>
+                    </div>
+                @endforeach
+            @else
+                <div style="font-size:12px; color:#991b1b;">No supplier payments due within 14 days.</div>
+            @endif
+        </div>
+    </div>
+    @endif
 </div>
 
 {{-- ── Recent tables (owner/cashier only) ── --}}

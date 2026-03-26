@@ -10,15 +10,22 @@ class ProductController extends Controller
 {
     public function index(Request $request)
     {
-        $search = $request->get('search');
+        $search = trim((string) $request->get('search', ''));
 
-        $products = Product::when($search, function ($q) use ($search) {
+        $products = Product::with(['suppliers' => function ($q) {
+                $q->orderBy('name');
+            }])
+            ->when($search, function ($q) use ($search) {
                 $q->where(function ($q2) use ($search) {
                     $q2->where('name',     'like', "%{$search}%")
                        ->orWhere('sku',      'like', "%{$search}%")
                        ->orWhere('brand',    'like', "%{$search}%")
                        ->orWhere('model',    'like', "%{$search}%")
-                       ->orWhere('category', 'like', "%{$search}%");
+                       ->orWhere('category', 'like', "%{$search}%")
+                       ->orWhereHas('suppliers', function ($qs) use ($search) {
+                           $qs->where('suppliers.name', 'like', "%{$search}%")
+                              ->orWhere('product_suppliers.cost_price', 'like', "%{$search}%");
+                       });
                 });
             })
             ->orderBy('name')

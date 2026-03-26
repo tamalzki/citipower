@@ -5,6 +5,10 @@
 @section('content')
     <div class="page-header">
         <div>
+            <a href="{{ route('reports.hub') }}"
+               style="font-size:13px; font-weight:600; color:#64748b; text-decoration:none; display:inline-flex; align-items:center; gap:4px; margin-bottom:4px;">
+                ← Back to Reports
+            </a>
             <h2>Inventory Report</h2>
             <p>Current stock levels, value, and reorder visibility</p>
         </div>
@@ -14,14 +18,14 @@
         <div class="card-body">
             <form method="GET" action="{{ route('reports.inventory') }}" style="display:grid; grid-template-columns: 1.2fr 1fr auto; gap:12px; align-items:end;">
                 <div class="form-group" style="margin:0;">
-                    <label for="search">Search Product / SKU</label>
+                    <label for="search">Search Product / SKU / Brand / Model / Category / Supplier</label>
                     <input
                         type="text"
                         id="search"
                         name="search"
                         value="{{ $search }}"
                         class="form-control"
-                        placeholder="Type product name or SKU">
+                        placeholder="Type keyword...">
                 </div>
                 <div class="form-group" style="margin:0;">
                     <label for="status">Stock Status</label>
@@ -87,6 +91,23 @@
         </div>
     </div>
 
+    <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
+        <div class="stat-card">
+            <div class="stat-icon-box icon-blue">🏭</div>
+            <div>
+                <div class="stat-number">{{ number_format($summary['main_branch_units']) }}</div>
+                <div class="stat-label">{{ $mainBranch->name }} Units</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon-box icon-green">🏪</div>
+            <div>
+                <div class="stat-number">{{ number_format($summary['second_branch_units']) }}</div>
+                <div class="stat-label">{{ $secondBranch->name }} Units</div>
+            </div>
+        </div>
+    </div>
+
     <div class="card">
         <div class="card-title">Product-Level Inventory Details</div>
         <div class="table-wrapper">
@@ -95,9 +116,11 @@
                     <tr>
                         <th>Product</th>
                         <th>SKU</th>
-                        <th>Stock</th>
+                        <th>Total Stock</th>
                         <th>Min Stock</th>
                         <th>Status</th>
+                        <th>{{ $mainBranch->code }}</th>
+                        <th>{{ $secondBranch->code }}</th>
                         <th>Cost Value</th>
                         <th>Retail Value</th>
                     </tr>
@@ -105,13 +128,14 @@
                 <tbody>
                     @forelse($products as $product)
                         @php
-                            $costValue = $product->stock_quantity * $product->purchase_price;
-                            $retailValue = $product->stock_quantity * $product->selling_price;
+                            $combinedQty = (int) ($branchStocks[$product->id]['total'] ?? $product->stock_quantity);
+                            $costValue = $combinedQty * $product->purchase_price;
+                            $retailValue = $combinedQty * $product->selling_price;
                         @endphp
                         <tr>
                             <td style="font-weight:600; color:#0f172a;">{{ $product->name }}</td>
                             <td>{{ $product->sku }}</td>
-                            <td>{{ number_format($product->stock_quantity) }}</td>
+                            <td>{{ number_format($combinedQty) }}</td>
                             <td>{{ number_format($product->minimum_stock) }}</td>
                             <td>
                                 @if($product->stock_quantity <= 0)
@@ -122,12 +146,14 @@
                                     <span class="badge badge-success">Healthy</span>
                                 @endif
                             </td>
+                            <td>{{ number_format($branchStocks[$product->id]['main'] ?? 0) }}</td>
+                            <td>{{ number_format($branchStocks[$product->id]['second'] ?? 0) }}</td>
                             <td>₱{{ number_format($costValue, 2) }}</td>
                             <td>₱{{ number_format($retailValue, 2) }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7">
+                            <td colspan="9">
                                 <div class="empty-state">
                                     <div class="empty-icon">📭</div>
                                     <p>No products match the selected filters.</p>
