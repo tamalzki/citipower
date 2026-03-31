@@ -91,16 +91,24 @@
     }
 </style>
 
+@php
+    /** @var \App\Models\PurchaseOrder|null $purchaseOrder */
+    $isEditing = isset($__editing) && $__editing === true && isset($purchaseOrder);
+@endphp
+
 <div class="page-header">
     <div>
-        <h2>New Purchase Order</h2>
+        <h2>{{ $isEditing ? 'Edit Purchase Order' : 'New Purchase Order' }}</h2>
         <p>Fill in order details, pick products, and review the total before saving</p>
     </div>
-    <a href="{{ route('purchase-orders.index') }}" class="btn btn-secondary">← Back</a>
+    <a href="{{ $isEditing ? route('purchase-orders.show', $purchaseOrder) : route('purchase-orders.index') }}" class="btn btn-secondary">← Back</a>
 </div>
 
-<form method="POST" action="{{ route('purchase-orders.store') }}" id="po-form">
+<form method="POST" action="{{ $isEditing ? route('purchase-orders.update', $purchaseOrder) : route('purchase-orders.store') }}" id="po-form">
 @csrf
+@if($isEditing)
+    @method('PUT')
+@endif
 
 {{-- ══ STEP 1: Order Info ══ --}}
 <div class="card">
@@ -114,7 +122,10 @@
                 <select name="supplier_id" class="form-control" required>
                     <option value="">— Select supplier —</option>
                     @foreach($suppliers as $s)
-                        <option value="{{ $s->id }}">{{ $s->name }}</option>
+                        <option value="{{ $s->id }}"
+                            @selected(old('supplier_id', $isEditing ? $purchaseOrder->supplier_id : null) == $s->id)>
+                            {{ $s->name }}
+                        </option>
                     @endforeach
                 </select>
                 @if($suppliers->isEmpty())
@@ -126,30 +137,30 @@
             <div class="form-group" style="margin-bottom:0;">
                 <label>Order Date *</label>
                 <input type="date" name="order_date" id="order_date" class="form-control"
-                       value="{{ old('order_date', now()->toDateString()) }}" required>
+                       value="{{ old('order_date', $isEditing ? optional($purchaseOrder->order_date)->toDateString() : now()->toDateString()) }}" required>
             </div>
             <div class="form-group" style="margin-bottom:0;">
                 <label>Expected Arrival / Payment Due Date</label>
                 <input type="date" name="expected_arrival_date" class="form-control"
-                       value="{{ old('expected_arrival_date') }}">
+                       value="{{ old('expected_arrival_date', $isEditing && $purchaseOrder->expected_arrival_date ? $purchaseOrder->expected_arrival_date->toDateString() : null) }}">
             </div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px;">
             <div class="form-group" style="margin-bottom:0;">
                 <label>Payment Series (Terms Count)</label>
                 <input type="number" name="payment_terms_count" min="1" max="60" class="form-control"
-                       value="{{ old('payment_terms_count') }}" placeholder="e.g. 4">
+                       value="{{ old('payment_terms_count', $isEditing ? $purchaseOrder->payment_terms_count : null) }}" placeholder="e.g. 4">
             </div>
             <div class="form-group" style="margin-bottom:0;">
                 <label>Payment Window (Days)</label>
                 <input type="number" name="payment_terms_days" min="1" max="3650" class="form-control"
-                       value="{{ old('payment_terms_days', 90) }}" placeholder="e.g. 90">
+                       value="{{ old('payment_terms_days', $isEditing ? $purchaseOrder->payment_terms_days : 90) }}" placeholder="e.g. 90">
             </div>
         </div>
         <div class="form-group" style="margin-top:14px; margin-bottom:0;">
             <label>Note / Reference</label>
             <input type="text" name="note" class="form-control"
-                   value="{{ old('note') }}"
+                   value="{{ old('note', $isEditing ? $purchaseOrder->note : null) }}"
                    placeholder="e.g. Urgent restock for extension cords" maxlength="255">
         </div>
     </div>
@@ -206,14 +217,22 @@
                         </tr>
                     </thead>
                     <tbody id="items-body">
-                        <tr id="empty-row">
-                            <td colspan="5">
-                                <div style="text-align:center; padding:32px 20px; color:#94a3b8;">
-                                    <div style="font-size:26px; margin-bottom:8px;">📦</div>
-                                    Search for a product above to add items to this order.
-                                </div>
-                            </td>
-                        </tr>
+                        @php
+                            $oldItems = collect(old('items', []));
+                            $editingItems = $isEditing ? $purchaseOrder->items->load('product') : collect();
+                            $hasInitialItems = $oldItems->isNotEmpty() || $editingItems->isNotEmpty();
+                        @endphp
+
+                        @if(!$hasInitialItems)
+                            <tr id="empty-row">
+                                <td colspan="5">
+                                    <div style="text-align:center; padding:32px 20px; color:#94a3b8;">
+                                        <div style="font-size:26px; margin-bottom:8px;">📦</div>
+                                        Search for a product above to add items to this order.
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
                     </tbody>
                     <tfoot id="items-foot" style="display:none;">
                         <tr style="background:#f8fafc;">
@@ -242,7 +261,9 @@
                 </div>
                 <div class="summary-row">
                     <span class="label">Order date</span>
-                    <span id="sum-date" style="font-weight:600; color:#0f172a;">{{ now()->format('M d, Y') }}</span>
+                    <span id="sum-date" style="font-weight:600; color:#0f172a;">
+                        {{ $isEditing && $purchaseOrder->order_date ? $purchaseOrder->order_date->format('M d, Y') : now()->format('M d, Y') }}
+                    </span>
                 </div>
                 <div class="summary-row">
                     <span class="label">Due date</span>
@@ -264,8 +285,8 @@
                 </div>
 
                 <button type="submit" class="btn btn-primary" id="submit-po"
-                        style="width:100%; justify-content:center; padding:10px; margin-top:14px;" disabled>
-                    Save Purchase Order
+                        style="width:100%; justify-content:center; padding:10px; margin-top:14px;" {{ $isEditing ? '' : 'disabled' }}>
+                    {{ $isEditing ? 'Update Purchase Order' : 'Save Purchase Order' }}
                 </button>
                 <a href="{{ route('purchase-orders.index') }}" class="btn btn-secondary"
                    style="width:100%; justify-content:center; padding:10px; margin-top:6px;">
@@ -621,6 +642,32 @@
         itemsFoot.style.display = lines > 0 ? '' : 'none';
     }
 
+    // If editing, hydrate existing line items on load
+    @if($isEditing)
+    window.addEventListener('DOMContentLoaded', function () {
+        @foreach($purchaseOrder->items as $item)
+            window.poAddLine(
+                {{ (int) $item->product_id }},
+                @json($item->product?->name ?? 'Product'),
+                {{ (float) $item->purchase_price }}
+            );
+            (function () {
+                const row = document.querySelector('tr[data-product-id="{{ (int) $item->product_id }}"]');
+                if (!row) return;
+                const qtyInput = row.querySelector('.po-qty');
+                const priceInput = row.querySelector('.po-price');
+                if (qtyInput) {
+                    qtyInput.value = {{ (int) $item->quantity }};
+                    qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                if (priceInput) {
+                    priceInput.value = '{{ number_format($item->purchase_price, 2, '.', '') }}';
+                    priceInput.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            })();
+        @endforeach
+    });
+    @endif
 })();
 </script>
 

@@ -124,6 +124,92 @@ class PurchaseOrderController extends Controller
         return redirect()->route('purchase-orders.index')->with('success', 'Purchase order created successfully.');
     }
 
+    public function edit(PurchaseOrder $purchaseOrder)
+    {
+        // Only allow editing while still ordered and before any payments/deliveries
+        if (
+            $purchaseOrder->status !== 'ordered'
+            || SupplierDelivery::where('purchase_order_id', $purchaseOrder->id)->exists()
+            || $purchaseOrder->supplierPayments()->exists()
+        ) {
+            return redirect()
+                ->route('purchase-orders.show', $purchaseOrder)
+                ->with('error', 'This purchase order has already been received or has payments recorded and can no longer be edited.');
+        }
+
+        $suppliers = Supplier::orderBy('name')->get();
+        $purchaseOrder->load('items.product');
+
+        return view('purchase-orders.edit', compact('purchaseOrder', 'suppliers'));
+    }
+
+    public function update(Request $request, PurchaseOrder $purchaseOrder)
+    {
+        // Guard against editing after the PO is already flowing through inventory/ledger
+        if (
+            $purchaseOrder->status !== 'ordered'
+            || SupplierDelivery::where('purchase_order_id', $purchaseOrder->id)->exists()
+            || $purchaseOrder->supplierPayments()->exists()
+        ) {
+            return redirect()
+                ->route('purchase-orders.show', $purchaseOrder)
+                ->with('error', 'This purchase order has already been received or has payments recorded and can no longer be edited.');
+        }
+
+        $request->merge([
+            'expected_arrival_date' => $request->input('expected_arrival_date') ?: null,
+        ]);
+
+        $request->validate([
+            'supplier_id' => 'required|exists:suppliers,id',
+            'order_date' => 'required|date',
+            'expected_arrival_date' => 'nullable|date|after_or_equal:order_date',
+            'payment_terms_count' => 'nullable|integer|min:1|max:60',
+            'payment_terms_days' => 'nullable|integer|min:1|max:3650',
+            'items' => 'required|array|min:1',
+            'items.*.product_id' => 'required|exists:products,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.purchase_price' => 'required|numeric|min:0.01',
+            'note' => 'nullable|string|max:255',
+        ]);
+
+        DB::transaction(function () use ($request, $purchaseOrder) {
+            $total = 0;
+
+            $purchaseOrder->update([
+                'supplier_id' => $request->supplier_id,
+                'order_date' => $request->order_date,
+                'expected_arrival_date' => $request->filled('expected_arrival_date') ? $request->expected_arrival_date : null,
+                'payment_terms_count' => $request->filled('payment_terms_count') ? (int) $request->payment_terms_count : null,
+                'payment_terms_days' => $request->filled('payment_terms_days') ? (int) $request->payment_terms_days : null,
+                'note' => $request->note,
+            ]);
+
+            // Replace all line items with the new set
+            $purchaseOrder->items()->delete();
+
+            foreach ($request->items as $item) {
+                $qty = (int) $item['quantity'];
+                $price = (float) $item['purchase_price'];
+                $subtotal = $qty * $price;
+                $total += $subtotal;
+
+                $purchaseOrder->items()->create([
+                    'product_id' => $item['product_id'],
+                    'quantity' => $qty,
+                    'purchase_price' => $price,
+                    'subtotal' => $subtotal,
+                ]);
+            }
+
+            $purchaseOrder->update(['total_amount' => $total]);
+        });
+
+        return redirect()
+            ->route('purchase-orders.show', $purchaseOrder)
+            ->with('success', 'Purchase order updated successfully.');
+    }
+
     public function show(PurchaseOrder $purchaseOrder)
     {
         $purchaseOrder->load('supplier', 'items.product', 'supplierPayments');
@@ -250,5 +336,27 @@ class PurchaseOrderController extends Controller
 
         return redirect()->back()
             ->with('success', 'Payment recorded and reflected in Supplier Ledger.');
+    }
+
+    public function destroy(PurchaseOrder $purchaseOrder)
+    {
+        // Only allow deleting POs that have not yet affected inventory or the supplier ledger
+        $hasDeliveries = SupplierDelivery::where('purchase_order_id', $purchaseOrder->id)->exists();
+        $hasPayments   = $purchaseOrder->supplierPayments()->exists();
+
+        if ($purchaseOrder->status !== 'ordered' || $hasDeliveries || $hasPayments) {
+            return redirect()
+                ->route('purchase-orders.show', $purchaseOrder)
+                ->with('error', 'This purchase order has already affected inventory or the supplier ledger and cannot be deleted. You may adjust inventory or payments instead.');
+        }
+
+        DB::transaction(function () use ($purchaseOrder) {
+            $purchaseOrder->items()->delete();
+            $purchaseOrder->delete();
+        });
+
+        return redirect()
+            ->route('purchase-orders.index')
+            ->with('success', 'Purchase order deleted. No inventory or supplier ledger entries were affected.');
     }
 }

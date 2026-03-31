@@ -159,6 +159,7 @@
                     $paidAmt    = $po->total_paid;
                     $balanceAmt = $po->payment_balance;
                     $payStatus  = $po->payment_status;
+                    $hasPayments = $po->supplierPayments->isNotEmpty();
                 @endphp
                 <tr>
                     <td style="font-size:12px; white-space:nowrap;">{{ $po->order_date->format('M d, Y') }}</td>
@@ -195,6 +196,9 @@
                     <td>
                         <div style="display:flex; gap:6px; flex-wrap:wrap;">
                             <a href="{{ route('purchase-orders.show', $po) }}" class="btn btn-secondary btn-sm">View</a>
+                            @if(!$hasPayments && $po->status === 'ordered' && (auth()->user()->hasRole('owner') || auth()->user()->hasRole('inventory')))
+                                <a href="{{ route('purchase-orders.edit', $po) }}" class="btn btn-primary btn-sm">Edit</a>
+                            @endif
                             @if($po->status !== 'received')
                                 <button type="button" class="btn btn-success btn-sm receive-btn"
                                         data-url="{{ route('purchase-orders.items-json', $po) }}"
@@ -203,19 +207,27 @@
                                 </button>
                             @endif
                             @if(auth()->user()->hasRole('owner') || auth()->user()->hasRole('inventory'))
-                            <button type="button" class="btn btn-primary btn-sm pay-btn"
-                                    data-supplier="{{ $po->supplier?->name }}"
-                                    data-order-date="{{ $po->order_date->format('M d, Y') }}"
-                                    data-total="{{ number_format($po->total_amount, 2, '.', '') }}"
-                                    data-balance="{{ number_format($balanceAmt, 2, '.', '') }}"
-                                    data-terms="{{ (int) ($po->payment_terms_count ?? 0) }}"
-                                    data-remaining-terms="{{ (int) $po->remaining_terms }}"
-                                    data-suggested-term="{{ number_format($po->suggested_term_amount, 2, '.', '') }}"
-                                    data-due-date="{{ $po->expected_arrival_date?->format('M d, Y') ?? '' }}"
-                                    data-term-days="{{ (int) ($po->payment_terms_days ?? 0) }}"
-                                    data-action="{{ route('purchase-orders.record-payment', $po) }}">
-                                💳 Pay
-                            </button>
+                                <button type="button" class="btn btn-primary btn-sm pay-btn"
+                                        data-supplier="{{ $po->supplier?->name }}"
+                                        data-order-date="{{ $po->order_date->format('M d, Y') }}"
+                                        data-total="{{ number_format($po->total_amount, 2, '.', '') }}"
+                                        data-balance="{{ number_format($balanceAmt, 2, '.', '') }}"
+                                        data-terms="{{ (int) ($po->payment_terms_count ?? 0) }}"
+                                        data-remaining-terms="{{ (int) $po->remaining_terms }}"
+                                        data-suggested-term="{{ number_format($po->suggested_term_amount, 2, '.', '') }}"
+                                        data-due-date="{{ $po->expected_arrival_date?->format('M d, Y') ?? '' }}"
+                                        data-term-days="{{ (int) ($po->payment_terms_days ?? 0) }}"
+                                        data-action="{{ route('purchase-orders.record-payment', $po) }}">
+                                    💳 Pay
+                                </button>
+                                @if($po->status === 'ordered' && !$hasPayments)
+                                    <form method="POST" action="{{ route('purchase-orders.destroy', $po) }}"
+                                          onsubmit="return confirm('Delete this purchase order? This will remove the order and its line items. Since it has not yet been received or paid, inventory and supplier ledger will not be affected.');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                                    </form>
+                                @endif
                             @endif
                         </div>
                     </td>

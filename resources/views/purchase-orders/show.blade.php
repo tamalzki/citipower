@@ -101,6 +101,21 @@
     </div>
     <div style="display:flex; gap:8px;">
         <a href="{{ route('purchase-orders.index') }}" class="btn btn-secondary">← Back</a>
+        @php
+            $hasPayments = $purchaseOrder->supplierPayments->isNotEmpty();
+        @endphp
+        @if($purchaseOrder->status === 'ordered' && !$hasPayments && (auth()->user()->hasRole('owner') || auth()->user()->hasRole('inventory')))
+            <a href="{{ route('purchase-orders.edit', $purchaseOrder) }}" class="btn btn-primary">Edit</a>
+        @endif
+        @if($purchaseOrder->status === 'ordered' && !$hasPayments && (auth()->user()->hasRole('owner') || auth()->user()->hasRole('inventory')))
+            <form method="POST" action="{{ route('purchase-orders.destroy', $purchaseOrder) }}"
+                  onsubmit="return confirm('Delete this purchase order? This will remove the order and its line items. Since it has not yet been received or paid, inventory and supplier ledger will not be affected.');"
+                  style="margin:0;">
+                @csrf
+                @method('DELETE')
+                <button type="submit" class="btn btn-danger">Delete</button>
+            </form>
+        @endif
         @if($purchaseOrder->status !== 'received')
             <button type="button" class="btn btn-success receive-btn"
                     data-url="{{ route('purchase-orders.items-json', $purchaseOrder) }}"
