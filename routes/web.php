@@ -144,7 +144,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->except(['show'])
         ->middleware('role:owner,inventory');
     Route::resource('purchase-orders', PurchaseOrderController::class)
-        ->only(['index', 'create', 'store', 'show'])
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy'])
         ->middleware('role:owner,inventory');
     Route::get('/purchase-orders-products', [PurchaseOrderController::class, 'productsJson'])
         ->middleware('role:owner,inventory')
