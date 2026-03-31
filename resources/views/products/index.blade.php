@@ -32,10 +32,9 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Name</th>
+                        <th>Name / Model</th>
                         <th>Brand</th>
                         <th>Category</th>
-                        <th>Model</th>
                         <th>SKU</th>
                         <th>Suppliers & Cost</th>
                         <th>Purchase Price</th>
@@ -55,7 +54,6 @@
                         </td>
                         <td>{{ $product->brand ?: '—' }}</td>
                         <td>{{ $product->category ?: '—' }}</td>
-                        <td>{{ $product->model ?: '—' }}</td>
                         <td>
                             @if($product->sku)
                                 <span class="badge badge-gray">{{ $product->sku }}</span>
@@ -67,15 +65,25 @@
                             @if($product->suppliers->isEmpty())
                                 <span style="color:#94a3b8;">—</span>
                             @else
+                                @php
+                                    $sortedSuppliers = $product->suppliers->sortBy('pivot.cost_price')->values();
+                                    $topTwoSuppliers = $sortedSuppliers->take(2);
+                                    $cheapestSupplierId = $sortedSuppliers->first()?->id;
+                                @endphp
                                 <div style="display:flex; flex-direction:column; gap:2px; min-width:180px;">
-                                    @foreach($product->suppliers->sortBy('pivot.cost_price')->take(3) as $supplier)
+                                    @foreach($topTwoSuppliers as $supplier)
                                         <div style="font-size:11.5px; line-height:1.25;">
                                             <span style="font-weight:600;">{{ $supplier->name }}</span>
+                                            @if($supplier->id === $cheapestSupplierId)
+                                                <span style="font-size:10px; font-weight:700; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; border-radius:999px; padding:0 5px; margin-left:4px;">
+                                                    Cheapest
+                                                </span>
+                                            @endif
                                             <span style="color:#334155;">- ₱{{ number_format($supplier->pivot->cost_price, 2) }}</span>
                                         </div>
                                     @endforeach
-                                    @if($product->suppliers->count() > 3)
-                                        <span style="font-size:11px; color:#64748b;">+{{ $product->suppliers->count() - 3 }} more</span>
+                                    @if($sortedSuppliers->count() > 2)
+                                        <span style="font-size:11px; color:#64748b;">+{{ $sortedSuppliers->count() - 2 }} more</span>
                                     @endif
                                 </div>
                             @endif
@@ -97,7 +105,6 @@
                         </td>
                         <td>
                             <div style="display:flex; gap:4px; flex-wrap:nowrap; white-space:nowrap;">
-                                <a href="{{ route('products.show', $product) }}" class="btn btn-secondary btn-sm">View</a>
                                 <a href="{{ route('inventory.add-stock', $product) }}" class="btn btn-success btn-sm">+ Stock</a>
                                 <a href="{{ route('inventory.adjust-stock', $product) }}" class="btn btn-warning btn-sm">Adjust</a>
                                 <a href="{{ route('products.edit', $product) }}" class="btn btn-secondary btn-sm">Edit</a>
