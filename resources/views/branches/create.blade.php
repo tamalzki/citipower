@@ -9,7 +9,7 @@
     <div class="card" style="max-width:480px;">
         <div class="card-title">Branch Information</div>
         <div class="card-body">
-            <form action="{{ route('branches.store') }}" method="POST">
+            <form action="{{ route('branches.store') }}" method="POST" id="branch-create-form">
                 @csrf
                 <div class="form-group">
                     <label>Branch Name *</label>
@@ -31,4 +31,22 @@
             </form>
         </div>
     </div>
+    <script>
+        (function () {
+            const f = document.getElementById('branch-create-form');
+            if (!f || !window.CitiOffline?.queueBranchCreate) return;
+            f.addEventListener('submit', async function (e) {
+                if (navigator.onLine) return;
+                e.preventDefault();
+                const name = f.querySelector('[name="name"]')?.value?.trim();
+                const code = f.querySelector('[name="code"]')?.value?.trim();
+                if (!name || !code) { alert('Name and code are required.'); return; }
+                try {
+                    const ref = await window.CitiOffline.queueBranchCreate({ name: name, code: code });
+                    alert('Offline: Branch queued. Ref: ' + ref.slice(0, 8));
+                    window.location.href = '{{ route('branches.index') }}';
+                } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+            });
+        })();
+    </script>
 @endsection

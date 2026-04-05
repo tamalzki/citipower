@@ -20,7 +20,7 @@
                 <div class="alert alert-danger" style="margin-bottom:16px;">{{ $errors->first() }}</div>
             @endif
 
-            <form method="POST" action="{{ route('users.update', $user) }}">
+            <form method="POST" action="{{ route('users.update', $user) }}" id="user-edit-form">
                 @csrf
                 @method('PUT')
 
@@ -81,5 +81,30 @@
         </div>
     </div>
 </div>
-
+<script>
+    (function () {
+        const f = document.getElementById('user-edit-form');
+        if (!f || !window.CitiOffline?.queueUserUpdate) return;
+        f.addEventListener('submit', async function (e) {
+            if (navigator.onLine) return;
+            e.preventDefault();
+            const pw = f.querySelector('[name="password"]')?.value || '';
+            if (pw.trim() !== '') {
+                alert('Password changes require an online connection. Clear the password fields to queue name, email, and role only, or try again when online.');
+                return;
+            }
+            const payload = {
+                user_id: {{ (int) $user->id }},
+                name: f.querySelector('[name="name"]')?.value?.trim(),
+                email: f.querySelector('[name="email"]')?.value?.trim(),
+                role: f.querySelector('[name="role"]')?.value,
+            };
+            try {
+                const ref = await window.CitiOffline.queueUserUpdate(payload);
+                alert('Offline: User update queued. Ref: ' + ref.slice(0, 8));
+                window.location.href = '{{ route('users.index') }}';
+            } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+        });
+    })();
+</script>
 @endsection

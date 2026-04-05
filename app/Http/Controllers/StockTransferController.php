@@ -39,9 +39,9 @@ class StockTransferController extends Controller
 
         $transfers = StockTransfer::with(['product', 'fromBranch', 'toBranch', 'transferredBy'])
             ->when($search, function ($q) use ($search) {
-                $q->whereHas('product', fn($q2) => $q2->where('name', 'like', "%{$search}%"))
-                  ->orWhereHas('fromBranch', fn($q2) => $q2->where('name', 'like', "%{$search}%"))
-                  ->orWhereHas('toBranch',   fn($q2) => $q2->where('name', 'like', "%{$search}%"));
+                $q->whereHas('product', fn ($q2) => $q2->where('name', 'like', "%{$search}%"))
+                    ->orWhereHas('fromBranch', fn ($q2) => $q2->where('name', 'like', "%{$search}%"))
+                    ->orWhereHas('toBranch', fn ($q2) => $q2->where('name', 'like', "%{$search}%"));
             })
             ->orderByDesc('created_at')
             ->paginate(30)
@@ -63,6 +63,7 @@ class StockTransferController extends Controller
         $branchStocks = $products->map(function ($p) use ($toSecond, $fromSecond) {
             $secondQty = max(0, (int) ($toSecond[$p->id] ?? 0) - (int) ($fromSecond[$p->id] ?? 0));
             $mainQty = (int) $p->stock_quantity;
+
             return [
                 'product' => $p,
                 'main_qty' => $mainQty,
@@ -71,10 +72,18 @@ class StockTransferController extends Controller
             ];
         });
 
+        $secondBranchTotal = collect($toSecond->keys())
+            ->merge($fromSecond->keys())
+            ->unique()
+            ->sum(function ($id) use ($toSecond, $fromSecond) {
+                return max(0, (int) ($toSecond[$id] ?? 0) - (int) ($fromSecond[$id] ?? 0));
+            });
+        $mainBranchTotal = (int) $products->sum('stock_quantity');
+
         $branchTotals = [
-            'main' => $branchStocks->sum('main_qty'),
-            'second' => $branchStocks->sum('second_qty'),
-            'all' => $branchStocks->sum('total_qty'),
+            'main' => $mainBranchTotal,
+            'second' => $secondBranchTotal,
+            'all' => $mainBranchTotal + $secondBranchTotal,
         ];
 
         $mainBranchProducts = $branchStocks->map(fn ($row) => [
@@ -104,7 +113,10 @@ class StockTransferController extends Controller
     public function create()
     {
         [$mainBranch, $secondBranch] = $this->ensureFixedBranches();
-        $products = Product::orderBy('name')->get();
+        $products = Product::query()
+            ->orderBy('name')
+            ->get(['id', 'name', 'sku', 'stock_quantity']);
+
         return view('stock-transfers.create', compact('products', 'mainBranch', 'secondBranch'));
     }
 
@@ -113,19 +125,19 @@ class StockTransferController extends Controller
         [$mainBranch, $secondBranch] = $this->ensureFixedBranches();
 
         $request->validate([
-            'items'                  => 'required|array|min:1',
-            'items.*.product_id'     => 'required|distinct|exists:products,id',
-            'items.*.quantity'       => 'required|integer|min:1',
-            'note'           => 'nullable|string|max:500',
+            'items' => 'required|array|min:1',
+            'items.*.product_id' => 'required|distinct|exists:products,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'note' => 'nullable|string|max:500',
         ]);
 
         foreach ($request->items as $item) {
             StockTransfer::create([
-                'product_id'     => $item['product_id'],
+                'product_id' => $item['product_id'],
                 'from_branch_id' => $mainBranch->id,
-                'to_branch_id'   => $secondBranch->id,
-                'quantity'       => (int) $item['quantity'],
-                'note'           => $request->note,
+                'to_branch_id' => $secondBranch->id,
+                'quantity' => (int) $item['quantity'],
+                'note' => $request->note,
                 'transferred_by' => auth()->id(),
             ]);
         }

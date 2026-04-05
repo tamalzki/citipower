@@ -264,7 +264,9 @@
                         @if($entry['type'] === 'delivery')
                             @if(empty($entry['from_po']))
                                 <form action="{{ route('supplier-ledger.destroy-delivery', [$supplier, $entry['model']]) }}"
-                                      method="POST" onsubmit="return confirm('Delete this delivery?')">
+                                      method="POST" class="offline-ledger-delivery-delete-form"
+                                      data-supplier-id="{{ $supplier->id }}" data-delivery-id="{{ $entry['model']->id }}"
+                                      onsubmit="return confirm('Delete this delivery?')">
                                     @csrf @method('DELETE')
                                     <button class="btn btn-danger btn-sm">✕</button>
                                 </form>
@@ -274,7 +276,9 @@
                         @else
                             @if(empty($entry['from_po']))
                                 <form action="{{ route('supplier-ledger.destroy-payment', [$supplier, $entry['model']]) }}"
-                                      method="POST" onsubmit="return confirm('Delete this payment?')">
+                                      method="POST" class="offline-ledger-payment-delete-form"
+                                      data-supplier-id="{{ $supplier->id }}" data-payment-id="{{ $entry['model']->id }}"
+                                      onsubmit="return confirm('Delete this payment?')">
                                     @csrf @method('DELETE')
                                     <button class="btn btn-danger btn-sm">✕</button>
                                 </form>
@@ -324,7 +328,7 @@
                     style="background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8;">✕</button>
         </div>
         <form action="{{ route('supplier-ledger.store-delivery', $supplier) }}" method="POST"
-              style="padding:18px 22px;">
+              id="ledger-delivery-form" style="padding:18px 22px;">
             @csrf
             <div class="form-group">
                 <label>DR Number *</label>
@@ -372,7 +376,7 @@
                     style="background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8;">✕</button>
         </div>
         <form action="{{ route('supplier-ledger.store-payment', $supplier) }}" method="POST"
-              style="padding:18px 22px;">
+              id="ledger-payment-form" style="padding:18px 22px;">
             @csrf
             <div class="form-group">
                 <label>Payment Date *</label>
@@ -416,6 +420,75 @@
         if (e.target === this) this.style.display = 'none';
     });
 });
+(function () {
+    const df = document.getElementById('ledger-delivery-form');
+    if (df && window.CitiOffline?.queueLedgerDeliveryCreate) {
+        df.addEventListener('submit', async function (e) {
+            if (navigator.onLine) return;
+            e.preventDefault();
+            try {
+                const ref = await window.CitiOffline.queueLedgerDeliveryCreate({
+                    supplier_id: {{ (int) $supplier->id }},
+                    dr_number: df.querySelector('[name="dr_number"]')?.value || '',
+                    delivery_date: df.querySelector('[name="delivery_date"]')?.value,
+                    amount: parseFloat(df.querySelector('[name="amount"]')?.value || '0'),
+                    notes: df.querySelector('[name="notes"]')?.value || '',
+                });
+                alert('Offline: Delivery queued. Ref: ' + ref.slice(0, 8));
+                window.location.reload();
+            } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+        });
+    }
+    const pf = document.getElementById('ledger-payment-form');
+    if (pf && window.CitiOffline?.queueLedgerPaymentCreate) {
+        pf.addEventListener('submit', async function (e) {
+            if (navigator.onLine) return;
+            e.preventDefault();
+            try {
+                const ref = await window.CitiOffline.queueLedgerPaymentCreate({
+                    supplier_id: {{ (int) $supplier->id }},
+                    payment_date: pf.querySelector('[name="payment_date"]')?.value,
+                    amount: parseFloat(pf.querySelector('[name="amount"]')?.value || '0'),
+                    payment_method: pf.querySelector('[name="payment_method"]')?.value,
+                    reference_no: pf.querySelector('[name="reference_no"]')?.value || '',
+                    notes: pf.querySelector('[name="notes"]')?.value || '',
+                });
+                alert('Offline: Payment queued. Ref: ' + ref.slice(0, 8));
+                window.location.reload();
+            } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+        });
+    }
+    document.querySelectorAll('.offline-ledger-delivery-delete-form').forEach(function (form) {
+        form.addEventListener('submit', async function (e) {
+            if (navigator.onLine || !window.CitiOffline?.queueLedgerDeliveryDelete) return;
+            e.preventDefault();
+            if (!confirm('Delete this delivery?')) return;
+            try {
+                const ref = await window.CitiOffline.queueLedgerDeliveryDelete({
+                    supplier_id: parseInt(form.dataset.supplierId || '0', 10),
+                    delivery_id: parseInt(form.dataset.deliveryId || '0', 10),
+                });
+                alert('Offline: Delete queued. Ref: ' + ref.slice(0, 8));
+                form.closest('tr')?.remove();
+            } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+        });
+    });
+    document.querySelectorAll('.offline-ledger-payment-delete-form').forEach(function (form) {
+        form.addEventListener('submit', async function (e) {
+            if (navigator.onLine || !window.CitiOffline?.queueLedgerPaymentDelete) return;
+            e.preventDefault();
+            if (!confirm('Delete this payment?')) return;
+            try {
+                const ref = await window.CitiOffline.queueLedgerPaymentDelete({
+                    supplier_id: parseInt(form.dataset.supplierId || '0', 10),
+                    payment_id: parseInt(form.dataset.paymentId || '0', 10),
+                });
+                alert('Offline: Delete queued. Ref: ' + ref.slice(0, 8));
+                form.closest('tr')?.remove();
+            } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+        });
+    });
+})();
 </script>
 
 @endsection

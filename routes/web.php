@@ -1,19 +1,20 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\ProductController;
-use App\Http\Controllers\InventoryController;
-use App\Http\Controllers\SalesController;
-use App\Http\Controllers\ReportController;
-use App\Http\Controllers\ExpenseController;
-use App\Http\Controllers\ExpenseCategoryController;
-use App\Http\Controllers\PaymentController;
-use App\Http\Controllers\PurchaseOrderController;
-use App\Http\Controllers\SupplierController;
-use App\Http\Controllers\UserController;
 use App\Http\Controllers\BranchController;
+use App\Http\Controllers\ExpenseCategoryController;
+use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\OfflineSyncController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PurchaseOrderController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\SalesController;
 use App\Http\Controllers\StockTransferController;
+use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\SupplierLedgerController;
+use App\Http\Controllers\UserController;
 use App\Models\Branch;
 use App\Models\Expense;
 use App\Models\Product;
@@ -29,15 +30,21 @@ Route::get('/', function () {
 Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/dashboard', function () {
-        $today      = now()->toDateString();
-        $monthStart = now()->startOfMonth()->toDateString();
-        $monthEnd   = now()->endOfMonth()->toDateString();
+        $today = now()->toDateString();
+        $monthStart = now()->copy()->startOfMonth();
+        $monthEnd = now()->copy()->endOfMonth();
 
-        $totalProducts   = Product::count();
-        $outOfStockCount = Product::where('stock_quantity', '<=', 0)->count();
-        $lowStockCount   = Product::whereColumn('stock_quantity', '<=', 'minimum_stock')
-                               ->where('stock_quantity', '>', 0)->count();
-        $totalStockUnits = (int) Product::sum('stock_quantity');
+        $productStats = Product::query()
+            ->selectRaw('COUNT(*) as total_products')
+            ->selectRaw('SUM(CASE WHEN stock_quantity <= 0 THEN 1 ELSE 0 END) as out_of_stock_count')
+            ->selectRaw('SUM(CASE WHEN stock_quantity > 0 AND stock_quantity <= minimum_stock THEN 1 ELSE 0 END) as low_stock_count')
+            ->selectRaw('COALESCE(SUM(stock_quantity), 0) as total_stock_units')
+            ->first();
+
+        $totalProducts = (int) ($productStats->total_products ?? 0);
+        $outOfStockCount = (int) ($productStats->out_of_stock_count ?? 0);
+        $lowStockCount = (int) ($productStats->low_stock_count ?? 0);
+        $totalStockUnits = (int) ($productStats->total_stock_units ?? 0);
 
         $mainBranch = Branch::firstOrCreate(['code' => 'DAV-MAIN'], ['name' => 'DAVAO -MAIN']);
         $secondBranch = Branch::firstOrCreate(['code' => 'DIG-SECOND'], ['name' => 'DIGOS -SECOND']);
@@ -56,34 +63,49 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->selectRaw('product_id, SUM(quantity) as qty')
             ->groupBy('product_id')
             ->pluck('qty', 'product_id');
-        $secondBranchUnits = 0;
-        foreach (Product::get(['id']) as $p) {
-            $secondBranchUnits += max(0, (int) ($toSecond[$p->id] ?? 0) - (int) ($fromSecond[$p->id] ?? 0));
-        }
+        // Only products that appear in transfers can have non-zero net second-branch qty.
+        $secondBranchUnits = collect($toSecond->keys())
+            ->merge($fromSecond->keys())
+            ->unique()
+            ->sum(function ($id) use ($toSecond, $fromSecond) {
+                return max(0, (int) ($toSecond[$id] ?? 0) - (int) ($fromSecond[$id] ?? 0));
+            });
         $mainBranchUnits = $totalStockUnits;
 
-        $todaySales  = (float) Sale::whereDate('created_at', $today)->sum('total_amount');
-        $monthSales  = (float) Sale::whereMonth('created_at', now()->month)
-                           ->whereYear('created_at', now()->year)->sum('total_amount');
+        $todaySales = (float) Sale::whereDate('created_at', $today)->sum('total_amount');
+        $monthSales = (float) Sale::whereBetween('created_at', [$monthStart, $monthEnd])->sum('total_amount');
 
-        $todayExpenses  = (float) Expense::whereDate('expense_date', $today)->sum('amount');
-        $monthExpenses  = (float) Expense::whereMonth('expense_date', now()->month)
-                              ->whereYear('expense_date', now()->year)->sum('amount');
+        $todayExpenses = (float) Expense::whereDate('expense_date', $today)->sum('amount');
+        $monthExpenses = (float) Expense::whereBetween('expense_date', [
+            $monthStart->toDateString(),
+            $monthEnd->toDateString(),
+        ])->sum('amount');
 
-        $recentSales = Sale::orderByDesc('created_at')->limit(5)->get();
-        $recentExpenses = Expense::with('category')->orderByDesc('expense_date')->orderByDesc('id')->limit(5)->get();
-        $lowStockProducts = Product::whereColumn('stock_quantity', '<=', 'minimum_stock')
+        $recentSales = Sale::query()
+            ->select(['id', 'created_at', 'total_amount'])
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get();
+        $recentExpenses = Expense::with('category:id,name')
+            ->select(['id', 'expense_category_id', 'expense_date', 'amount'])
+            ->orderByDesc('expense_date')
+            ->orderByDesc('id')
+            ->limit(5)
+            ->get();
+        $lowStockProducts = Product::query()
+            ->whereColumn('stock_quantity', '<=', 'minimum_stock')
             ->orderBy('stock_quantity')
             ->limit(6)
             ->get(['id', 'name', 'stock_quantity', 'minimum_stock']);
         $paymentDueAlerts = PurchaseOrder::with(['supplier', 'supplierPayments'])
             ->whereDate('expected_arrival_date', '>=', now()->toDateString())
             ->whereDate('expected_arrival_date', '<=', now()->addDays(14)->toDateString())
+            ->whereRaw(
+                'total_amount > (SELECT COALESCE(SUM(amount), 0) FROM supplier_payments WHERE supplier_payments.purchase_order_id = purchase_orders.id)'
+            )
             ->orderBy('expected_arrival_date')
-            ->get()
-            ->filter(fn ($po) => $po->payment_balance > 0)
-            ->take(6)
-            ->values();
+            ->limit(6)
+            ->get();
 
         return view('dashboard', compact(
             'totalProducts',
@@ -127,6 +149,26 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/sales/{sale}/payments', [PaymentController::class, 'store'])
         ->middleware('role:owner,cashier')
         ->name('sales.payments.store');
+    Route::post('/offline-sync/mutations', [OfflineSyncController::class, 'syncMutations'])
+        ->name('offline-sync.mutations');
+    Route::post('/offline-sync/sales', [OfflineSyncController::class, 'syncSales'])
+        ->middleware('role:owner,cashier')
+        ->name('offline-sync.sales');
+    Route::post('/offline-sync/sales/voids', [OfflineSyncController::class, 'syncSaleVoids'])
+        ->middleware('role:owner')
+        ->name('offline-sync.sales.voids');
+    Route::post('/offline-sync/sales/deletes', [OfflineSyncController::class, 'syncSaleDeletes'])
+        ->middleware('role:owner')
+        ->name('offline-sync.sales.deletes');
+    Route::post('/offline-sync/expenses', [OfflineSyncController::class, 'syncExpenses'])
+        ->middleware('role:owner,cashier')
+        ->name('offline-sync.expenses');
+    Route::post('/offline-sync/expenses/updates', [OfflineSyncController::class, 'syncExpenseUpdates'])
+        ->middleware('role:owner,cashier')
+        ->name('offline-sync.expenses.updates');
+    Route::post('/offline-sync/expenses/deletes', [OfflineSyncController::class, 'syncExpenseDeletes'])
+        ->middleware('role:owner')
+        ->name('offline-sync.expenses.deletes');
     Route::delete('/sales/{sale}/payments/{payment}', [PaymentController::class, 'destroy'])
         ->middleware('role:owner')
         ->name('sales.payments.destroy');
@@ -158,6 +200,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/purchase-orders/{purchase_order}/record-payment', [PurchaseOrderController::class, 'recordPayment'])
         ->middleware('role:owner,inventory')
         ->name('purchase-orders.record-payment');
+    Route::post('/offline-sync/purchase-orders', [OfflineSyncController::class, 'syncPurchaseOrders'])
+        ->middleware('role:owner,inventory')
+        ->name('offline-sync.purchase-orders');
+    Route::post('/offline-sync/purchase-orders/updates', [OfflineSyncController::class, 'syncPurchaseOrderUpdates'])
+        ->middleware('role:owner,inventory')
+        ->name('offline-sync.purchase-orders.updates');
+    Route::post('/offline-sync/purchase-orders/deletes', [OfflineSyncController::class, 'syncPurchaseOrderDeletes'])
+        ->middleware('role:owner,inventory')
+        ->name('offline-sync.purchase-orders.deletes');
 
     // Branches & Stock Transfers
     Route::resource('branches', BranchController::class)
@@ -166,6 +217,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('stock-transfers', StockTransferController::class)
         ->only(['index', 'create', 'store'])
         ->middleware('role:owner,inventory');
+    Route::post('/offline-sync/stock-transfers', [OfflineSyncController::class, 'syncStockTransfers'])
+        ->middleware('role:owner,inventory')
+        ->name('offline-sync.stock-transfers');
 
     // Supplier Ledger
     Route::middleware('role:owner')->group(function () {

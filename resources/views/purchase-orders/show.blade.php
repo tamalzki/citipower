@@ -109,6 +109,8 @@
         @endif
         @if($purchaseOrder->status === 'ordered' && !$hasPayments && (auth()->user()->hasRole('owner') || auth()->user()->hasRole('inventory')))
             <form method="POST" action="{{ route('purchase-orders.destroy', $purchaseOrder) }}"
+                  class="offline-po-delete-form"
+                  data-po-id="{{ $purchaseOrder->id }}"
                   onsubmit="return confirm('Delete this purchase order? This will remove the order and its line items. Since it has not yet been received or paid, inventory and supplier ledger will not be affected.');"
                   style="margin:0;">
                 @csrf
@@ -117,6 +119,16 @@
             </form>
         @endif
         @if($purchaseOrder->status !== 'received')
+            @php $purchaseOrder->loadMissing('items.product'); @endphp
+            <script type="application/json" id="po-receive-embed">{!! json_encode($purchaseOrder->items->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'product_name' => $item->product?->name ?? 'Product',
+                    'sku' => $item->product?->sku ?? '',
+                    'ordered_qty' => (int) $item->quantity,
+                    'purchase_price' => (float) $item->purchase_price,
+                ];
+            })->values()) !!}</script>
             <button type="button" class="btn btn-success receive-btn"
                     data-url="{{ route('purchase-orders.items-json', $purchaseOrder) }}"
                     data-action="{{ route('purchase-orders.receive', $purchaseOrder) }}">
@@ -255,7 +267,7 @@
             <button class="modal-close" id="modal-close-btn" title="Close">✕</button>
         </div>
 
-        <form method="POST" id="receive-form">
+        <form method="POST" id="receive-form" data-purchase-order-id="{{ $purchaseOrder->id }}">
             @csrf
             <div style="padding:16px 20px 0; display:grid; grid-template-columns:1fr 1fr; gap:12px; border-bottom:1px solid #f1f5f9; padding-bottom:16px;">
                 <div class="form-group" style="margin:0;">
@@ -361,7 +373,7 @@
                     style="background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8;padding:4px;">✕</button>
         </div>
         <form action="{{ route('purchase-orders.record-payment', $purchaseOrder) }}" method="POST"
-              style="padding:20px 24px;">
+              id="po-record-payment-form" style="padding:20px 24px;">
             @csrf
             <div style="margin-bottom:12px; border-radius:10px; padding:10px 12px; background:{{ $balance > 0 ? '#fff7ed' : '#f0fdf4' }}; border:1px solid {{ $balance > 0 ? '#fed7aa' : '#bbf7d0' }};">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
@@ -450,6 +462,26 @@ document.getElementById('po-pay-amount').addEventListener('input', function () {
             : 'This order is fully paid.';
     }
 });
+(function () {
+    const f = document.getElementById('po-record-payment-form');
+    if (!f || !window.CitiOffline?.queuePoRecordPayment) return;
+    f.addEventListener('submit', async function (e) {
+        if (navigator.onLine) return;
+        e.preventDefault();
+        try {
+            const ref = await window.CitiOffline.queuePoRecordPayment({
+                purchase_order_id: {{ (int) $purchaseOrder->id }},
+                payment_date: f.querySelector('[name="payment_date"]')?.value,
+                amount: parseFloat(f.querySelector('[name="amount"]')?.value || '0'),
+                payment_method: f.querySelector('[name="payment_method"]')?.value,
+                reference_no: f.querySelector('[name="reference_no"]')?.value || '',
+                notes: f.querySelector('[name="notes"]')?.value || '',
+            });
+            alert('Offline: PO payment queued. Ref: ' + ref.slice(0, 8));
+            window.location.reload();
+        } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+    });
+})();
 </script>
 
 <script>
@@ -477,6 +509,24 @@ document.getElementById('po-pay-amount').addEventListener('input', function () {
             submitBtn.disabled     = true;
             receiveForm.action     = this.dataset.action;
             openModal();
+
+            if (!navigator.onLine) {
+                const embed = document.getElementById('po-receive-embed');
+                if (!embed) {
+                    modalBody.innerHTML = '<div style="text-align:center;padding:30px 20px;color:#dc2626;font-size:13px;">Cannot receive offline: reload this page while online once to cache line items.</div>';
+                    return;
+                }
+                try {
+                    const items = JSON.parse(embed.textContent || '[]');
+                    modalTitle.textContent = 'Receive Items';
+                    modalSub.textContent   = items.length + ' product(s) (offline)';
+                    renderItems(items);
+                    submitBtn.disabled = false;
+                } catch (err) {
+                    modalBody.innerHTML = `<div style="text-align:center;padding:30px 20px;color:#dc2626;font-size:13px;">Invalid offline data.<br><small>${err.message}</small></div>`;
+                }
+                return;
+            }
 
             try {
                 const res  = await fetch(this.dataset.url, {
@@ -550,6 +600,31 @@ document.getElementById('po-pay-amount').addEventListener('input', function () {
         submitBtn.disabled    = true;
         submitBtn.textContent = 'Processing…';
 
+        if (!navigator.onLine && window.CitiOffline?.queuePoReceive) {
+            const poId = parseInt(receiveForm.dataset.purchaseOrderId || '0', 10);
+            const quantities = {};
+            receiveForm.querySelectorAll('.receive-qty-input').forEach(function (inp) {
+                const m = inp.name.match(/quantities\[(\d+)\]/);
+                if (m) quantities[m[1]] = parseInt(inp.value || '0', 10);
+            });
+            try {
+                const ref = await window.CitiOffline.queuePoReceive({
+                    purchase_order_id: poId,
+                    dr_number: receiveForm.querySelector('[name="dr_number"]')?.value || '',
+                    arrival_date: receiveForm.querySelector('[name="arrival_date"]')?.value || null,
+                    arrival_notes: receiveForm.querySelector('[name="arrival_notes"]')?.value || '',
+                    quantities: quantities,
+                });
+                alert('Offline: Receive queued. Ref: ' + ref.slice(0, 8));
+                window.location.href = '{{ route('purchase-orders.index') }}';
+            } catch (err) {
+                submitBtn.disabled    = false;
+                submitBtn.textContent = '✓ Confirm Receive';
+                alert((err && err.message) || 'Queue failed.');
+            }
+            return;
+        }
+
         try {
             const res = await fetch(this.action, {
                 method: 'POST',
@@ -572,6 +647,29 @@ document.getElementById('po-pay-amount').addEventListener('input', function () {
         return d.innerHTML;
     }
 })();
+
+document.querySelectorAll('.offline-po-delete-form').forEach(form => {
+    form.addEventListener('submit', async function (e) {
+        if (navigator.onLine || !window.CitiOffline || typeof window.CitiOffline.queuePurchaseOrderDelete !== 'function') {
+            return;
+        }
+        e.preventDefault();
+        const confirmed = window.confirm('Delete this purchase order? This will remove the order and its line items. Since it has not yet been received or paid, inventory and supplier ledger will not be affected.');
+        if (!confirmed) return;
+        const poId = parseInt(form.dataset.poId || '0', 10);
+        if (!poId) {
+            alert('Missing purchase order id.');
+            return;
+        }
+        try {
+            const localId = await window.CitiOffline.queuePurchaseOrderDelete({ purchase_order_id: poId });
+            alert('Offline: Purchase order delete queued and will auto-sync when online. Ref: ' + localId.slice(0, 8));
+            window.location.href = '{{ route('purchase-orders.index') }}';
+        } catch (err) {
+            alert((err && err.message) || 'Failed to queue purchase order delete offline.');
+        }
+    });
+});
 </script>
 
 @endsection

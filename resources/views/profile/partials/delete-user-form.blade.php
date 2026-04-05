@@ -6,6 +6,7 @@
 
         <p class="mt-1 text-sm text-gray-600">
             {{ __('Once your account is deleted, all of its resources and data will be permanently deleted. Before deleting your account, please download any data or information that you wish to retain.') }}
+            {{ __('Account deletion requires an online connection and verified password on the server; it is not queued for offline sync.') }}
         </p>
     </header>
 
@@ -52,4 +53,15 @@
             </div>
         </form>
     </x-modal>
+    <script>
+        (function () {
+            const f = document.getElementById('profile-delete-form');
+            if (!f) return;
+            f.addEventListener('submit', function (e) {
+                if (navigator.onLine) return;
+                e.preventDefault();
+                alert(@json(__('Account deletion requires an online connection and is not queued for sync.')));
+            });
+        })();
+    </script>
 </section>

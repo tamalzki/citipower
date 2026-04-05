@@ -38,7 +38,9 @@
                             <td>
                                 <div style="display:flex; gap:6px;">
                                     <a href="{{ route('expense-categories.edit', $category) }}" class="btn btn-secondary btn-sm">Edit</a>
-                                    <form action="{{ route('expense-categories.destroy', $category) }}" method="POST" style="display:inline" onsubmit="return confirm('Delete this category?')">
+                                    <form action="{{ route('expense-categories.destroy', $category) }}" method="POST"
+                                          class="offline-ec-delete-form" data-category-id="{{ $category->id }}"
+                                          style="display:inline" onsubmit="return confirm('Delete this category?')">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="btn btn-danger btn-sm">Delete</button>
@@ -61,4 +63,21 @@
             </table>
         </div>
     </div>
+    <script>
+        (function () {
+            document.querySelectorAll('.offline-ec-delete-form').forEach(function (form) {
+                form.addEventListener('submit', async function (e) {
+                    if (navigator.onLine || !window.CitiOffline?.queueExpenseCategoryDelete) return;
+                    e.preventDefault();
+                    if (!confirm('Delete this category?')) return;
+                    const cid = parseInt(form.dataset.categoryId || '0', 10);
+                    try {
+                        const ref = await window.CitiOffline.queueExpenseCategoryDelete({ expense_category_id: cid });
+                        alert('Offline: Delete queued. Ref: ' + ref.slice(0, 8));
+                        form.closest('tr')?.remove();
+                    } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+                });
+            });
+        })();
+    </script>
 @endsection

@@ -12,33 +12,28 @@ class ExpenseController extends Controller
     {
         $search = trim($request->input('search', ''));
 
-        $expenses = Expense::with('category')
-            ->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
-                $q2->where('vendor', 'like', "%{$search}%")
-                   ->orWhere('description', 'like', "%{$search}%")
-                   ->orWhere('reference_no', 'like', "%{$search}%")
-                   ->orWhereHas('category', fn ($c) => $c->where('name', 'like', "%{$search}%"));
-            }))
+        $filtered = Expense::query()->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
+            $q2->where('vendor', 'like', "%{$search}%")
+                ->orWhere('description', 'like', "%{$search}%")
+                ->orWhere('reference_no', 'like', "%{$search}%")
+                ->orWhereHas('category', fn ($c) => $c->where('name', 'like', "%{$search}%"));
+        }));
+
+        $expenses = (clone $filtered)
+            ->with('category')
             ->orderByDesc('expense_date')
             ->orderByDesc('id')
             ->paginate(20)
             ->withQueryString();
 
-        $totalAmount = Expense::query()
-            ->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
-                $q2->where('vendor', 'like', "%{$search}%")
-                   ->orWhere('description', 'like', "%{$search}%")
-                   ->orWhere('reference_no', 'like', "%{$search}%")
-                   ->orWhereHas('category', fn ($c) => $c->where('name', 'like', "%{$search}%"));
-            }))
-            ->sum('amount');
+        $totalAmount = (float) (clone $filtered)->sum('amount');
 
         return view('expenses.index', compact('expenses', 'totalAmount', 'search'));
     }
 
     public function create()
     {
-        if (!auth()->user()->hasRole(['owner', 'cashier'])) {
+        if (! auth()->user()->hasRole(['owner', 'cashier'])) {
             abort(403, 'Only owner or cashier can record expenses.');
         }
 
@@ -73,7 +68,7 @@ class ExpenseController extends Controller
 
     public function edit(Expense $expense)
     {
-        if (!auth()->user()->hasRole(['owner', 'cashier'])) {
+        if (! auth()->user()->hasRole(['owner', 'cashier'])) {
             abort(403, 'Only owner or cashier can edit expenses.');
         }
 
@@ -108,7 +103,7 @@ class ExpenseController extends Controller
 
     public function destroy(Expense $expense)
     {
-        if (!auth()->user()->hasRole('owner')) {
+        if (! auth()->user()->hasRole('owner')) {
             abort(403, 'Only owner can delete expenses.');
         }
 

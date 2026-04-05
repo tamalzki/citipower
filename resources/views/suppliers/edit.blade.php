@@ -13,7 +13,7 @@
 
     <div class="card" style="max-width:760px;">
         <div class="card-body">
-            <form method="POST" action="{{ route('suppliers.update', $supplier) }}">
+            <form method="POST" action="{{ route('suppliers.update', $supplier) }}" id="supplier-edit-form">
                 @csrf
                 @method('PUT')
                 <div class="form-group">
@@ -47,4 +47,28 @@
             </form>
         </div>
     </div>
+    <script>
+        (function () {
+            const f = document.getElementById('supplier-edit-form');
+            if (!f || !window.CitiOffline?.queueSupplierUpdate) return;
+            f.addEventListener('submit', async function (e) {
+                if (navigator.onLine) return;
+                e.preventDefault();
+                const name = f.querySelector('[name="name"]')?.value?.trim();
+                if (!name) { alert('Name is required.'); return; }
+                try {
+                    const ref = await window.CitiOffline.queueSupplierUpdate({
+                        supplier_id: {{ (int) $supplier->id }},
+                        name: name,
+                        contact_person: f.querySelector('[name="contact_person"]')?.value || '',
+                        phone: f.querySelector('[name="phone"]')?.value || '',
+                        email: f.querySelector('[name="email"]')?.value || '',
+                        address: f.querySelector('[name="address"]')?.value || '',
+                    });
+                    alert('Offline: Update queued. Ref: ' + ref.slice(0, 8));
+                    window.location.href = '{{ route('suppliers.index') }}';
+                } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+            });
+        })();
+    </script>
 @endsection

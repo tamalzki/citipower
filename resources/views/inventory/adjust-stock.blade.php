@@ -38,7 +38,7 @@
                 </div>
             </div>
 
-            <form action="{{ route('inventory.adjust-stock', $product) }}" method="POST">
+            <form action="{{ route('inventory.adjust-stock', $product) }}" method="POST" id="adjust-stock-form">
                 @csrf
 
                 <div class="form-group">
@@ -95,5 +95,25 @@
                 preview.style.display = 'none';
             }
         });
+
+        (function () {
+            const f = document.getElementById('adjust-stock-form');
+            if (!f || !window.CitiOffline?.queueInventoryAdjustStock) return;
+            f.addEventListener('submit', async function (e) {
+                if (navigator.onLine) return;
+                e.preventDefault();
+                const newQty = parseInt(f.querySelector('[name="new_quantity"]')?.value || '', 10);
+                if (isNaN(newQty) || newQty < 0) { alert('Enter actual stock count.'); return; }
+                try {
+                    const ref = await window.CitiOffline.queueInventoryAdjustStock({
+                        product_id: {{ (int) $product->id }},
+                        new_quantity: newQty,
+                        reason: f.querySelector('[name="reason"]')?.value || '',
+                    });
+                    alert('Offline: Stock adjust queued. Ref: ' + ref.slice(0, 8));
+                    window.location.href = '{{ route('products.index') }}';
+                } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+            });
+        })();
     </script>
 @endsection

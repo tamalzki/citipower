@@ -6,6 +6,7 @@
 
         <p class="mt-1 text-sm text-gray-600">
             {{ __('Ensure your account is using a long, random password to stay secure.') }}
+            {{ __('Password changes require an online connection and are not added to the offline sync queue.') }}
         </p>
     </header>
 
@@ -45,4 +46,15 @@
             @endif
         </div>
     </form>
+    <script>
+        (function () {
+            const f = document.getElementById('profile-password-form');
+            if (!f) return;
+            f.addEventListener('submit', function (e) {
+                if (navigator.onLine) return;
+                e.preventDefault();
+                alert(@json(__('Password changes require an online connection and are not queued for sync.')));
+            });
+        })();
+    </script>
 </section>

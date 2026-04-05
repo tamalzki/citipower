@@ -766,10 +766,53 @@
         document.body.style.overflow = '';
     };
 
-    window.submitSaleForm = function () {
-        document.getElementById('modal-confirm-btn').textContent = 'Saving…';
-        document.getElementById('modal-confirm-btn').disabled    = true;
-        document.getElementById('sale-form').submit();
+    window.submitSaleForm = async function () {
+        const confirmBtn = document.getElementById('modal-confirm-btn');
+        confirmBtn.textContent = 'Saving…';
+        confirmBtn.disabled = true;
+
+        if (navigator.onLine) {
+            document.getElementById('sale-form').submit();
+            return;
+        }
+
+        try {
+            if (!window.CitiOffline || typeof window.CitiOffline.queueSale !== 'function') {
+                throw new Error('Offline module not available.');
+            }
+
+            const issuedReceipt = document.querySelector('[name="issued_receipt"]')?.value;
+            if (issuedReceipt !== '0' && issuedReceipt !== '1') {
+                throw new Error('Issued Receipt is required.');
+            }
+
+            const payloadItems = Object.keys(addedItems).map(pid => ({
+                product_id: parseInt(pid, 10),
+                quantity: parseInt(document.getElementById('qty-' + pid)?.value || '1', 10) || 1,
+            }));
+
+            if (!payloadItems.length) {
+                throw new Error('Add at least one product first.');
+            }
+
+            const payload = {
+                items: payloadItems,
+                discount_type: document.getElementById('discount_type')?.value || 'fixed',
+                discount_value: parseFloat(document.getElementById('discount_value_hidden')?.value || '0') || 0,
+                note: document.querySelector('[name="note"]')?.value || '',
+                issued_receipt: issuedReceipt,
+                poc: document.querySelector('[name="poc"]')?.value || '',
+            };
+
+            const localId = await window.CitiOffline.queueSale(payload);
+            closeConfirmModal();
+            alert('Offline: Sale saved locally and will auto-sync when online. Ref: ' + localId.slice(0, 8));
+            window.location.reload();
+        } catch (err) {
+            alert(err.message || 'Failed to save offline sale.');
+            confirmBtn.textContent = 'Confirm & Save Sale';
+            confirmBtn.disabled = false;
+        }
     };
 
     // Close on backdrop click

@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ExpenseCategory;
 use App\Models\Branch;
+use App\Models\Expense;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
-use App\Models\Expense;
 use App\Models\StockTransfer;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -16,8 +15,11 @@ use Illuminate\Support\Facades\DB;
 class ReportController extends Controller
 {
     private const MAIN_BRANCH_CODE = 'DAV-MAIN';
+
     private const SECOND_BRANCH_CODE = 'DIG-SECOND';
+
     private const MAIN_BRANCH_LABEL = 'DAVAO -MAIN';
+
     private const SECOND_BRANCH_LABEL = 'DIGOS -SECOND';
 
     public function hub()
@@ -82,26 +84,33 @@ class ReportController extends Controller
             ];
         }
 
-        $allProducts = Product::get(['id', 'stock_quantity', 'purchase_price', 'selling_price']);
-        $mainTotal = (int) $allProducts->sum('stock_quantity');
-        $secondTotal = 0;
+        $productStats = Product::query()
+            ->selectRaw('COUNT(*) as total_products')
+            ->selectRaw('SUM(CASE WHEN stock_quantity <= 0 THEN 1 ELSE 0 END) as out_of_stock_count')
+            ->selectRaw('SUM(CASE WHEN stock_quantity > 0 AND stock_quantity <= minimum_stock THEN 1 ELSE 0 END) as low_stock_count')
+            ->selectRaw('COALESCE(SUM(stock_quantity), 0) as main_total')
+            ->first();
+
+        $mainTotal = (int) ($productStats->main_total ?? 0);
+        $transferProductIds = collect($toSecond->keys())->merge($fromSecond->keys())->unique();
+        $secondTotal = $transferProductIds->sum(function ($id) use ($toSecond, $fromSecond) {
+            return max(0, (int) ($toSecond[$id] ?? 0) - (int) ($fromSecond[$id] ?? 0));
+        });
+
         $combinedCostValue = 0.0;
         $combinedRetailValue = 0.0;
-        foreach ($allProducts as $p) {
+        foreach (Product::query()->select(['id', 'stock_quantity', 'purchase_price', 'selling_price'])->orderBy('id')->cursor() as $p) {
             $secondQty = max(0, (int) ($toSecond[$p->id] ?? 0) - (int) ($fromSecond[$p->id] ?? 0));
-            $secondTotal += $secondQty;
             $combinedQty = (int) $p->stock_quantity + $secondQty;
-            $combinedCostValue += ((float) $p->purchase_price * $combinedQty);
-            $combinedRetailValue += ((float) $p->selling_price * $combinedQty);
+            $combinedCostValue += (float) $p->purchase_price * $combinedQty;
+            $combinedRetailValue += (float) $p->selling_price * $combinedQty;
         }
 
         $summary = [
-            'total_products' => Product::count(),
+            'total_products' => (int) ($productStats->total_products ?? 0),
             'total_units' => $mainTotal + $secondTotal,
-            'low_stock_count' => Product::whereColumn('stock_quantity', '<=', 'minimum_stock')
-                ->where('stock_quantity', '>', 0)
-                ->count(),
-            'out_of_stock_count' => Product::where('stock_quantity', '<=', 0)->count(),
+            'low_stock_count' => (int) ($productStats->low_stock_count ?? 0),
+            'out_of_stock_count' => (int) ($productStats->out_of_stock_count ?? 0),
             'inventory_cost_value' => $combinedCostValue,
             'inventory_retail_value' => $combinedRetailValue,
             'main_branch_units' => $mainTotal,
@@ -295,11 +304,11 @@ class ReportController extends Controller
 
         // Totals
         $totalAmount = (float) Expense::whereBetween('expense_date', [
-            $dateFrom->toDateString(), $dateTo->toDateString()
+            $dateFrom->toDateString(), $dateTo->toDateString(),
         ])->sum('amount');
 
         $totalCount = Expense::whereBetween('expense_date', [
-            $dateFrom->toDateString(), $dateTo->toDateString()
+            $dateFrom->toDateString(), $dateTo->toDateString(),
         ])->count();
 
         // Breakdown by category
@@ -320,12 +329,12 @@ class ReportController extends Controller
             ->withQueryString();
 
         return view('reports.expenses', [
-            'dateFrom'    => $dateFrom->toDateString(),
-            'dateTo'      => $dateTo->toDateString(),
+            'dateFrom' => $dateFrom->toDateString(),
+            'dateTo' => $dateTo->toDateString(),
             'totalAmount' => $totalAmount,
-            'totalCount'  => $totalCount,
-            'byCategory'  => $byCategory,
-            'expenses'    => $expenses,
+            'totalCount' => $totalCount,
+            'byCategory' => $byCategory,
+            'expenses' => $expenses,
         ]);
     }
 }

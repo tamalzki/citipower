@@ -27,6 +27,7 @@
                             <div style="display:flex; gap:6px;">
                                 <a href="{{ route('branches.edit', $branch) }}" class="btn btn-secondary btn-sm">Edit</a>
                                 <form action="{{ route('branches.destroy', $branch) }}" method="POST"
+                                      class="offline-branch-delete-form" data-branch-id="{{ $branch->id }}"
                                       style="display:inline" onsubmit="return confirm('Delete this branch?')">
                                     @csrf @method('DELETE')
                                     <button class="btn btn-danger btn-sm">Delete</button>
@@ -49,4 +50,21 @@
             </table>
         </div>
     </div>
+    <script>
+        (function () {
+            document.querySelectorAll('.offline-branch-delete-form').forEach(function (form) {
+                form.addEventListener('submit', async function (e) {
+                    if (navigator.onLine || !window.CitiOffline?.queueBranchDelete) return;
+                    e.preventDefault();
+                    if (!confirm('Delete this branch?')) return;
+                    const bid = parseInt(form.dataset.branchId || '0', 10);
+                    try {
+                        const ref = await window.CitiOffline.queueBranchDelete({ branch_id: bid });
+                        alert('Offline: Delete queued. Ref: ' + ref.slice(0, 8));
+                        form.closest('tr')?.remove();
+                    } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+                });
+            });
+        })();
+    </script>
 @endsection

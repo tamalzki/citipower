@@ -14,7 +14,7 @@
     <div class="card" style="max-width: 760px;">
         <div class="card-title">Expense Information</div>
         <div class="card-body">
-            <form action="{{ route('expenses.store') }}" method="POST">
+            <form action="{{ route('expenses.store') }}" method="POST" id="expense-form">
                 @csrf
 
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
@@ -71,4 +71,44 @@
             </form>
         </div>
     </div>
+    <script>
+        (function () {
+            const form = document.getElementById('expense-form');
+            if (!form) return;
+
+            form.addEventListener('submit', async function (e) {
+                if (navigator.onLine || !window.CitiOffline || typeof window.CitiOffline.queueExpense !== 'function') {
+                    return;
+                }
+
+                e.preventDefault();
+
+                const cat = form.querySelector('[name="expense_category_id"]')?.value;
+                const date = form.querySelector('[name="expense_date"]')?.value;
+                const amount = form.querySelector('[name="amount"]')?.value;
+
+                if (!cat || !date || !amount) {
+                    alert('Category, date, and amount are required.');
+                    return;
+                }
+
+                const payload = {
+                    expense_category_id: cat,
+                    expense_date: date,
+                    reference_no: form.querySelector('[name="reference_no"]')?.value || '',
+                    amount: parseFloat(amount),
+                    vendor: form.querySelector('[name=\"vendor\"]')?.value || '',
+                    description: form.querySelector('[name=\"description\"]')?.value || '',
+                };
+
+                try {
+                    const localId = await window.CitiOffline.queueExpense(payload);
+                    alert('Offline: Expense saved locally and will auto-sync when online. Ref: ' + localId.slice(0, 8));
+                    window.location.href = '{{ route('expenses.index') }}';
+                } catch (err) {
+                    alert((err && err.message) || 'Failed to save expense offline.');
+                }
+            });
+        })();
+    </script>
 @endsection

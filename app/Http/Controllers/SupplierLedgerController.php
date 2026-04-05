@@ -37,16 +37,17 @@ class SupplierLedgerController extends Controller
     {
         $search = trim($request->get('search', ''));
 
-        // Always load ALL entries for accurate running balance totals
-        $allDeliveries = SupplierDelivery::where('supplier_id', $supplier->id)->get();
-        $allPayments   = SupplierPayment::where('supplier_id', $supplier->id)->get();
+        // Load all entries (needed for merged timeline + running balance); POs eager-loaded once.
+        $allDeliveries = SupplierDelivery::where('supplier_id', $supplier->id)
+            ->with('purchaseOrder')
+            ->get();
+        $allPayments = SupplierPayment::where('supplier_id', $supplier->id)
+            ->with('purchaseOrder')
+            ->get();
 
         $totalDelivered = (float) $allDeliveries->sum('amount');
-        $totalPaid      = (float) $allPayments->sum('amount');
-        $balance        = max(0, $totalDelivered - $totalPaid);
-
-        // Apply search filter for display only
-        $allDeliveries->load('purchaseOrder');
+        $totalPaid = (float) $allPayments->sum('amount');
+        $balance = max(0, $totalDelivered - $totalPaid);
 
         $deliveries = collect($allDeliveries)
             ->when($search, fn($c) => $c->filter(fn($d) =>
@@ -72,8 +73,6 @@ class SupplierLedgerController extends Controller
                 'suggested_term_amount' => $d->purchaseOrder?->suggested_term_amount,
                 'model'       => $d,
             ]);
-
-        $allPayments->load('purchaseOrder');
 
         $payments = collect($allPayments)
             ->when($search, fn($c) => $c->filter(fn($p) =>

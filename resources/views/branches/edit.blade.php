@@ -9,7 +9,7 @@
     <div class="card" style="max-width:480px;">
         <div class="card-title">Branch Information</div>
         <div class="card-body">
-            <form action="{{ route('branches.update', $branch) }}" method="POST">
+            <form action="{{ route('branches.update', $branch) }}" method="POST" id="branch-edit-form">
                 @csrf @method('PUT')
                 <div class="form-group">
                     <label>Branch Name *</label>
@@ -30,4 +30,26 @@
             </form>
         </div>
     </div>
+    <script>
+        (function () {
+            const f = document.getElementById('branch-edit-form');
+            if (!f || !window.CitiOffline?.queueBranchUpdate) return;
+            f.addEventListener('submit', async function (e) {
+                if (navigator.onLine) return;
+                e.preventDefault();
+                const name = f.querySelector('[name="name"]')?.value?.trim();
+                const code = f.querySelector('[name="code"]')?.value?.trim();
+                if (!name || !code) { alert('Name and code are required.'); return; }
+                try {
+                    const ref = await window.CitiOffline.queueBranchUpdate({
+                        branch_id: {{ (int) $branch->id }},
+                        name: name,
+                        code: code,
+                    });
+                    alert('Offline: Update queued. Ref: ' + ref.slice(0, 8));
+                    window.location.href = '{{ route('branches.index') }}';
+                } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+            });
+        })();
+    </script>
 @endsection

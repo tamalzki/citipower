@@ -12,6 +12,7 @@
             <a href="{{ route('sales.index') }}" class="btn btn-secondary">← Back</a>
             @if(auth()->user()->role === 'owner')
             <form action="{{ route('sales.destroy', $sale) }}" method="POST"
+                  class="offline-sale-void-detail-form" data-sale-id="{{ $sale->id }}"
                   onsubmit="return confirm('Void this sale? Stock will be restored.')">
                 @csrf
                 @method('DELETE')
@@ -152,7 +153,8 @@
         <div class="card-title">Payments</div>
         <div class="card-body">
             @if(auth()->user()->hasRole(['owner', 'cashier']) && $sale->balance_due > 0)
-                <form method="POST" action="{{ route('sales.payments.store', $sale) }}" style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap:10px; align-items:end; margin-bottom:14px;">
+                <form method="POST" action="{{ route('sales.payments.store', $sale) }}" id="sale-payment-form"
+                      style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap:10px; align-items:end; margin-bottom:14px;">
                     @csrf
                     <div class="form-group" style="margin:0;">
                         <label>Date</label>
@@ -200,7 +202,10 @@
                             <td style="font-weight:600;">₱{{ number_format($payment->amount, 2) }}</td>
                             <td>
                                 @if(auth()->user()->role === 'owner')
-                                <form action="{{ route('sales.payments.destroy', [$sale, $payment]) }}" method="POST" onsubmit="return confirm('Delete this payment?')">
+                                <form action="{{ route('sales.payments.destroy', [$sale, $payment]) }}" method="POST"
+                                      class="offline-sale-payment-delete-form"
+                                      data-sale-id="{{ $sale->id }}" data-payment-id="{{ $payment->id }}"
+                                      onsubmit="return confirm('Delete this payment?')">
                                     @csrf
                                     @method('DELETE')
                                     <button class="btn btn-danger btn-sm">Delete</button>
@@ -218,4 +223,55 @@
             </div>
         </div>
     </div>
+    <script>
+        (function () {
+            document.querySelectorAll('.offline-sale-void-detail-form').forEach(function (form) {
+                form.addEventListener('submit', async function (e) {
+                    if (navigator.onLine || !window.CitiOffline?.queueSaleDelete) return;
+                    e.preventDefault();
+                    if (!confirm('Void this sale? Stock will be restored.')) return;
+                    const sid = parseInt(form.dataset.saleId || '0', 10);
+                    try {
+                        const ref = await window.CitiOffline.queueSaleDelete({ sale_id: sid });
+                        alert('Offline: Void queued. Ref: ' + ref.slice(0, 8));
+                        window.location.href = '{{ route('sales.index') }}';
+                    } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+                });
+            });
+            const payForm = document.getElementById('sale-payment-form');
+            if (payForm && window.CitiOffline?.queueSalePaymentCreate) {
+                payForm.addEventListener('submit', async function (e) {
+                    if (navigator.onLine) return;
+                    e.preventDefault();
+                    try {
+                        const ref = await window.CitiOffline.queueSalePaymentCreate({
+                            sale_id: {{ (int) $sale->id }},
+                            payment_date: payForm.querySelector('[name="payment_date"]')?.value,
+                            amount: parseFloat(payForm.querySelector('[name="amount"]')?.value || '0'),
+                            payment_method: payForm.querySelector('[name="payment_method"]')?.value,
+                            reference_no: payForm.querySelector('[name="reference_no"]')?.value || '',
+                            note: '',
+                        });
+                        alert('Offline: Payment queued. Ref: ' + ref.slice(0, 8));
+                        window.location.reload();
+                    } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+                });
+            }
+            document.querySelectorAll('.offline-sale-payment-delete-form').forEach(function (form) {
+                form.addEventListener('submit', async function (e) {
+                    if (navigator.onLine || !window.CitiOffline?.queueSalePaymentDelete) return;
+                    e.preventDefault();
+                    if (!confirm('Delete this payment?')) return;
+                    try {
+                        const ref = await window.CitiOffline.queueSalePaymentDelete({
+                            sale_id: parseInt(form.dataset.saleId || '0', 10),
+                            payment_id: parseInt(form.dataset.paymentId || '0', 10),
+                        });
+                        alert('Offline: Payment delete queued. Ref: ' + ref.slice(0, 8));
+                        form.closest('tr')?.remove();
+                    } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+                });
+            });
+        })();
+    </script>
 @endsection

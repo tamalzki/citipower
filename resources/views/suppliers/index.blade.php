@@ -57,7 +57,9 @@
                             <div style="display:flex; gap:6px;">
                                 <a href="{{ route('supplier-ledger.show', $supplier) }}" class="btn btn-primary btn-sm">Ledger</a>
                                 <a href="{{ route('suppliers.edit', $supplier) }}" class="btn btn-secondary btn-sm">Edit</a>
-                                <form method="POST" action="{{ route('suppliers.destroy', $supplier) }}" onsubmit="return confirm('Delete this supplier?')">
+                                <form method="POST" action="{{ route('suppliers.destroy', $supplier) }}"
+                                      class="offline-supplier-delete-form" data-supplier-id="{{ $supplier->id }}"
+                                      onsubmit="return confirm('Delete this supplier?')">
                                     @csrf @method('DELETE')
                                     <button class="btn btn-danger btn-sm">Delete</button>
                                 </form>
@@ -83,4 +85,21 @@
     </div>
 
     <div>{{ $suppliers->links() }}</div>
+    <script>
+        (function () {
+            document.querySelectorAll('.offline-supplier-delete-form').forEach(function (form) {
+                form.addEventListener('submit', async function (e) {
+                    if (navigator.onLine || !window.CitiOffline?.queueSupplierDelete) return;
+                    e.preventDefault();
+                    if (!confirm('Delete this supplier?')) return;
+                    const sid = parseInt(form.dataset.supplierId || '0', 10);
+                    try {
+                        const ref = await window.CitiOffline.queueSupplierDelete({ supplier_id: sid });
+                        alert('Offline: Delete queued. Ref: ' + ref.slice(0, 8));
+                        form.closest('tr')?.remove();
+                    } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+                });
+            });
+        })();
+    </script>
 @endsection

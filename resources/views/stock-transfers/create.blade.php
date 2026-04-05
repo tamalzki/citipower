@@ -282,15 +282,20 @@
                 addRow('', 1);
             }
 
-            // Validate combobox values before submit
+            // Validate combobox values before submit and support offline queue
             const form = document.querySelector('form[action="{{ route('stock-transfers.store') }}"]');
-            form.addEventListener('submit', function (e) {
+            form.addEventListener('submit', async function (e) {
                 let hasError = false;
                 const selectedIds = new Set();
+                const items = [];
+
                 wrap.querySelectorAll('.transfer-row').forEach(row => {
                     const input = row.querySelector('.combo-input');
                     const hidden = row.querySelector('.combo-hidden-id');
+                    const qtyEl = row.querySelector('input[name*=\"[quantity]\"]');
                     const errorEl = row.querySelector('.combo-error');
+                    const qty = parseInt(qtyEl?.value || '0', 10) || 0;
+
                     if (!hidden.value) {
                         errorEl.textContent = input.value.trim() ? 'Select a valid product from the dropdown.' : 'Select a product.';
                         errorEl.style.display = 'block';
@@ -303,11 +308,42 @@
                         hasError = true;
                         return;
                     }
+                    if (qty <= 0) {
+                        errorEl.textContent = 'Quantity must be at least 1.';
+                        errorEl.style.display = 'block';
+                        hasError = true;
+                        return;
+                    }
                     selectedIds.add(hidden.value);
                     errorEl.style.display = 'none';
+                    items.push({
+                        product_id: parseInt(hidden.value, 10),
+                        quantity: qty,
+                    });
                 });
+
                 if (hasError) {
                     e.preventDefault();
+                    return;
+                }
+
+                if (!navigator.onLine && window.CitiOffline && typeof window.CitiOffline.queueStockTransfer === 'function') {
+                    e.preventDefault();
+                    if (!items.length) {
+                        alert('Add at least one product to transfer.');
+                        return;
+                    }
+                    const payload = {
+                        note: form.querySelector('[name=\"note\"]')?.value || '',
+                        items,
+                    };
+                    try {
+                        const localId = await window.CitiOffline.queueStockTransfer(payload);
+                        alert('Offline: Stock transfer(s) saved locally and will auto-sync when online. Ref: ' + localId.slice(0, 8));
+                        window.location.href = '{{ route('stock-transfers.index') }}';
+                    } catch (err) {
+                        alert((err && err.message) || 'Failed to save stock transfer offline.');
+                    }
                 }
             });
         })();

@@ -78,6 +78,8 @@
                                     <a href="{{ route('expenses.edit', $expense) }}" class="btn btn-secondary btn-sm">Edit</a>
                                     @if(auth()->user()->role === 'owner')
                                     <form action="{{ route('expenses.destroy', $expense) }}" method="POST"
+                                          class="offline-expense-delete-form"
+                                          data-expense-id="{{ $expense->id }}"
                                           style="display:inline" onsubmit="return confirm('Delete this expense?')">
                                         @csrf @method('DELETE')
                                         <button type="submit" class="btn btn-danger btn-sm">Delete</button>
@@ -103,4 +105,32 @@
     </div>
 
     <div>{{ $expenses->links() }}</div>
+    <script>
+        (function () {
+            document.querySelectorAll('.offline-expense-delete-form').forEach(form => {
+                form.addEventListener('submit', async function (e) {
+                    if (navigator.onLine || !window.CitiOffline || typeof window.CitiOffline.queueExpenseDelete !== 'function') {
+                        return;
+                    }
+                    e.preventDefault();
+                    const confirmed = window.confirm('Delete this expense?');
+                    if (!confirmed) return;
+
+                    const expenseId = parseInt(form.dataset.expenseId || '0', 10);
+                    if (!expenseId) {
+                        alert('Missing expense id.');
+                        return;
+                    }
+
+                    try {
+                        const localId = await window.CitiOffline.queueExpenseDelete({ expense_id: expenseId });
+                        alert('Offline: Expense delete queued and will auto-sync when online. Ref: ' + localId.slice(0, 8));
+                        form.closest('tr')?.remove();
+                    } catch (err) {
+                        alert((err && err.message) || 'Failed to queue expense delete offline.');
+                    }
+                });
+            });
+        })();
+    </script>
 @endsection

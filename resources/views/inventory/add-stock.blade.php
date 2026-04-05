@@ -42,7 +42,7 @@
                 </div>
             </div>
 
-            <form action="{{ route('inventory.add-stock', $product) }}" method="POST">
+            <form action="{{ route('inventory.add-stock', $product) }}" method="POST" id="add-stock-form">
                 @csrf
 
                 <div class="form-group">
@@ -93,5 +93,25 @@
                 preview.style.display  = 'none';
             }
         });
+
+        (function () {
+            const f = document.getElementById('add-stock-form');
+            if (!f || !window.CitiOffline?.queueInventoryAddStock) return;
+            f.addEventListener('submit', async function (e) {
+                if (navigator.onLine) return;
+                e.preventDefault();
+                const qty = parseInt(f.querySelector('[name="quantity_added"]')?.value || '0', 10);
+                if (qty < 1) { alert('Enter a valid quantity.'); return; }
+                try {
+                    const ref = await window.CitiOffline.queueInventoryAddStock({
+                        product_id: {{ (int) $product->id }},
+                        quantity_added: qty,
+                        note: f.querySelector('[name="note"]')?.value || '',
+                    });
+                    alert('Offline: Add stock queued. Ref: ' + ref.slice(0, 8));
+                    window.location.href = '{{ route('products.index') }}';
+                } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+            });
+        })();
     </script>
 @endsection

@@ -201,6 +201,7 @@
                             @endif
                             @if($po->status !== 'received')
                                 <button type="button" class="btn btn-success btn-sm receive-btn"
+                                        data-po-id="{{ $po->id }}"
                                         data-url="{{ route('purchase-orders.items-json', $po) }}"
                                         data-action="{{ route('purchase-orders.receive', $po) }}">
                                     Receive
@@ -208,6 +209,7 @@
                             @endif
                             @if(auth()->user()->hasRole('owner') || auth()->user()->hasRole('inventory'))
                                 <button type="button" class="btn btn-primary btn-sm pay-btn"
+                                        data-purchase-order-id="{{ $po->id }}"
                                         data-supplier="{{ $po->supplier?->name }}"
                                         data-order-date="{{ $po->order_date->format('M d, Y') }}"
                                         data-total="{{ number_format($po->total_amount, 2, '.', '') }}"
@@ -222,6 +224,8 @@
                                 </button>
                                 @if($po->status === 'ordered' && !$hasPayments)
                                     <form method="POST" action="{{ route('purchase-orders.destroy', $po) }}"
+                                          class="offline-po-delete-form"
+                                          data-po-id="{{ $po->id }}"
                                           onsubmit="return confirm('Delete this purchase order? This will remove the order and its line items. Since it has not yet been received or paid, inventory and supplier ledger will not be affected.');">
                                         @csrf
                                         @method('DELETE')
@@ -243,6 +247,22 @@
 </div>
 <div>{{ $purchaseOrders->links() }}</div>
 
+@php
+    $poIndexReceiveEmbed = $purchaseOrders
+        ->filter(fn ($po) => $po->status !== 'received')
+        ->mapWithKeys(function ($po) {
+            return [$po->id => $po->items->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'product_name' => $item->product?->name ?? 'Product',
+                    'sku' => $item->product?->sku ?? '',
+                    'ordered_qty' => (int) $item->quantity,
+                    'purchase_price' => (float) $item->purchase_price,
+                ];
+            })->values()->all()];
+        });
+@endphp
+<script type="application/json" id="po-index-receive-embed">@json($poIndexReceiveEmbed)</script>
 
 {{-- ══ Receive Items Modal ══ --}}
 <div class="modal-backdrop" id="receive-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
@@ -301,8 +321,6 @@
     const modalLoading= document.getElementById('modal-loading');
     const receiveForm = document.getElementById('receive-form');
     const submitBtn   = document.getElementById('modal-submit-btn');
-    const csrfToken   = document.querySelector('meta[name="csrf-token"]')?.content
-                        || '{{ csrf_token() }}';
 
     function openModal() { modal.classList.add('open'); document.body.style.overflow = 'hidden'; }
     function closeModal() { modal.classList.remove('open'); document.body.style.overflow = ''; }
@@ -317,6 +335,7 @@
         btn.addEventListener('click', async function () {
             const itemsUrl = this.dataset.url;
             const action   = this.dataset.action;
+            const poId     = parseInt(this.dataset.poId || '0', 10);
 
             // Reset modal state
             modalTitle.textContent   = 'Receive Items';
@@ -324,7 +343,28 @@
             modalBody.innerHTML      = '<div class="modal-loading">Loading order details…</div>';
             submitBtn.disabled       = true;
             receiveForm.action       = action;
+            receiveForm.dataset.purchaseOrderId = poId ? String(poId) : '';
             openModal();
+
+            if (!navigator.onLine) {
+                const el = document.getElementById('po-index-receive-embed');
+                let embed = {};
+                try {
+                    embed = el ? JSON.parse(el.textContent || '{}') : {};
+                } catch (e) {
+                    embed = {};
+                }
+                const items = embed[String(poId)] ?? embed[poId] ?? [];
+                if (!Array.isArray(items) || !items.length) {
+                    modalBody.innerHTML = '<div class="modal-error">Cannot receive offline: reload this page while online once to cache line items, or use the PO detail page.</div>';
+                    return;
+                }
+                modalTitle.textContent = 'Receive Items';
+                modalSub.textContent   = items.length + ' product(s) (offline)';
+                renderItems(items);
+                submitBtn.disabled = false;
+                return;
+            }
 
             try {
                 const res  = await fetch(itemsUrl, {
@@ -403,6 +443,31 @@
         e.preventDefault();
         submitBtn.disabled   = true;
         submitBtn.textContent = 'Processing…';
+
+        if (!navigator.onLine && window.CitiOffline?.queuePoReceive) {
+            const poId = parseInt(receiveForm.dataset.purchaseOrderId || '0', 10);
+            const quantities = {};
+            receiveForm.querySelectorAll('.receive-qty-input').forEach(function (inp) {
+                const m = inp.name.match(/quantities\[(\d+)\]/);
+                if (m) quantities[m[1]] = parseInt(inp.value || '0', 10);
+            });
+            try {
+                const ref = await window.CitiOffline.queuePoReceive({
+                    purchase_order_id: poId,
+                    dr_number: receiveForm.querySelector('[name="dr_number"]')?.value || '',
+                    arrival_date: receiveForm.querySelector('[name="arrival_date"]')?.value || null,
+                    arrival_notes: receiveForm.querySelector('[name="arrival_notes"]')?.value || '',
+                    quantities: quantities,
+                });
+                alert('Offline: Receive queued. Ref: ' + ref.slice(0, 8));
+                window.location.reload();
+            } catch (err) {
+                submitBtn.disabled   = false;
+                submitBtn.textContent = '✓ Confirm Receive';
+                alert((err && err.message) || 'Queue failed.');
+            }
+            return;
+        }
 
         const formData = new FormData(this);
 
@@ -503,6 +568,10 @@ document.getElementById('pay-modal').addEventListener('click', function(e) {
 });
 document.querySelectorAll('.pay-btn').forEach(btn => {
     btn.addEventListener('click', function () {
+        const payFormEl = document.getElementById('pay-form');
+        if (payFormEl) {
+            payFormEl.dataset.purchaseOrderId = this.dataset.purchaseOrderId || '';
+        }
         const total = parseFloat(this.dataset.total || '0');
         const balance = parseFloat(this.dataset.balance || '0');
         const paid = Math.max(0, total - balance);
@@ -550,6 +619,59 @@ document.getElementById('pay-amount').addEventListener('input', function () {
             ? ('Remaining after this payment: ₱' + (balance - current).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}))
             : 'This order is fully paid.';
     }
+});
+
+(function () {
+    const payForm = document.getElementById('pay-form');
+    if (!payForm || !window.CitiOffline?.queuePoRecordPayment) return;
+    payForm.addEventListener('submit', async function (e) {
+        if (navigator.onLine) return;
+        e.preventDefault();
+        const poId = parseInt(payForm.dataset.purchaseOrderId || '0', 10);
+        if (!poId) {
+            alert('Missing purchase order. Close the modal and open Pay again.');
+            return;
+        }
+        try {
+            const ref = await window.CitiOffline.queuePoRecordPayment({
+                purchase_order_id: poId,
+                payment_date: payForm.querySelector('[name="payment_date"]')?.value,
+                amount: parseFloat(payForm.querySelector('[name="amount"]')?.value || '0'),
+                payment_method: payForm.querySelector('[name="payment_method"]')?.value,
+                reference_no: payForm.querySelector('[name="reference_no"]')?.value || '',
+                notes: payForm.querySelector('[name="notes"]')?.value || '',
+            });
+            alert('Offline: PO payment queued. Ref: ' + ref.slice(0, 8));
+            document.getElementById('pay-modal').style.display = 'none';
+            window.location.reload();
+        } catch (err) {
+            alert((err && err.message) || 'Queue failed.');
+        }
+    });
+})();
+
+document.querySelectorAll('.offline-po-delete-form').forEach(form => {
+    form.addEventListener('submit', async function (e) {
+        if (navigator.onLine || !window.CitiOffline || typeof window.CitiOffline.queuePurchaseOrderDelete !== 'function') {
+            return;
+        }
+        e.preventDefault();
+        const confirmed = window.confirm('Delete this purchase order? This will remove the order and its line items. Since it has not yet been received or paid, inventory and supplier ledger will not be affected.');
+        if (!confirmed) return;
+
+        const poId = parseInt(form.dataset.poId || '0', 10);
+        if (!poId) {
+            alert('Missing purchase order id.');
+            return;
+        }
+        try {
+            const localId = await window.CitiOffline.queuePurchaseOrderDelete({ purchase_order_id: poId });
+            alert('Offline: Purchase order delete queued and will auto-sync when online. Ref: ' + localId.slice(0, 8));
+            form.closest('tr')?.remove();
+        } catch (err) {
+            alert((err && err.message) || 'Failed to queue purchase order delete offline.');
+        }
+    });
 });
 </script>
 

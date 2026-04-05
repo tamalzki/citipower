@@ -109,6 +109,8 @@
                                 <a href="{{ route('inventory.adjust-stock', $product) }}" class="btn btn-warning btn-sm">Adjust</a>
                                 <a href="{{ route('products.edit', $product) }}" class="btn btn-secondary btn-sm">Edit</a>
                                 <form action="{{ route('products.destroy', $product) }}" method="POST"
+                                      class="offline-product-delete-form"
+                                      data-product-id="{{ $product->id }}"
                                       style="display:inline; margin:0;" onsubmit="return confirm('Delete this product?')">
                                     @csrf @method('DELETE')
                                     <button class="btn btn-danger btn-sm">Delete</button>
@@ -135,4 +137,23 @@
     </div>
 
     <div>{{ $products->links() }}</div>
+    <script>
+        (function () {
+            document.querySelectorAll('.offline-product-delete-form').forEach(function (form) {
+                form.addEventListener('submit', async function (e) {
+                    if (navigator.onLine || !window.CitiOffline?.queueProductDelete) return;
+                    e.preventDefault();
+                    if (!confirm('Delete this product?')) return;
+                    const id = parseInt(form.dataset.productId || '0', 10);
+                    try {
+                        const ref = await window.CitiOffline.queueProductDelete({ product_id: id });
+                        alert('Offline: Delete queued. Ref: ' + ref.slice(0, 8));
+                        form.closest('tr')?.remove();
+                    } catch (err) {
+                        alert((err && err.message) || 'Queue failed.');
+                    }
+                });
+            });
+        })();
+    </script>
 @endsection

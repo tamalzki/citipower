@@ -13,7 +13,7 @@
         @csrf
     </form>
 
-    <form method="post" action="{{ route('profile.update') }}" class="mt-6 space-y-6">
+    <form method="post" action="{{ route('profile.update') }}" class="mt-6 space-y-6" id="profile-info-form">
         @csrf
         @method('patch')
 
@@ -61,4 +61,22 @@
             @endif
         </div>
     </form>
+    <script>
+        (function () {
+            const f = document.getElementById('profile-info-form');
+            if (!f || !window.CitiOffline?.queueProfileUpdate) return;
+            f.addEventListener('submit', async function (e) {
+                if (navigator.onLine) return;
+                e.preventDefault();
+                try {
+                    const ref = await window.CitiOffline.queueProfileUpdate({
+                        name: f.querySelector('[name="name"]')?.value?.trim(),
+                        email: f.querySelector('[name="email"]')?.value?.trim(),
+                    });
+                    alert('Offline: Profile update queued. Ref: ' + ref.slice(0, 8));
+                    window.location.reload();
+                } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+            });
+        })();
+    </script>
 </section>

@@ -89,6 +89,7 @@
                             <a href="{{ route('users.edit', $user) }}" class="btn btn-secondary btn-sm">Edit</a>
                             @if($user->id !== auth()->id())
                                 <form method="POST" action="{{ route('users.destroy', $user) }}"
+                                      class="offline-user-delete-form" data-user-id="{{ $user->id }}"
                                       onsubmit="return confirm('Delete {{ addslashes($user->name) }}? This cannot be undone.')">
                                     @csrf @method('DELETE')
                                     <button class="btn btn-danger btn-sm">Delete</button>
@@ -104,5 +105,20 @@
         </table>
     </div>
 </div>
-
+<script>
+    (function () {
+        document.querySelectorAll('.offline-user-delete-form').forEach(function (form) {
+            form.addEventListener('submit', async function (e) {
+                if (navigator.onLine || !window.CitiOffline?.queueUserDelete) return;
+                e.preventDefault();
+                const uid = parseInt(form.dataset.userId || '0', 10);
+                try {
+                    const ref = await window.CitiOffline.queueUserDelete({ user_id: uid });
+                    alert('Offline: User delete queued. Ref: ' + ref.slice(0, 8));
+                    form.closest('tr')?.remove();
+                } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+            });
+        });
+    })();
+</script>
 @endsection

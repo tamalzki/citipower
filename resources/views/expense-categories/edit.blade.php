@@ -14,7 +14,7 @@
     <div class="card" style="max-width: 620px;">
         <div class="card-title">Category Details</div>
         <div class="card-body">
-            <form action="{{ route('expense-categories.update', $expenseCategory) }}" method="POST">
+            <form action="{{ route('expense-categories.update', $expenseCategory) }}" method="POST" id="ec-edit-form">
                 @csrf
                 @method('PUT')
 
@@ -37,4 +37,25 @@
             </form>
         </div>
     </div>
+    <script>
+        (function () {
+            const f = document.getElementById('ec-edit-form');
+            if (!f || !window.CitiOffline?.queueExpenseCategoryUpdate) return;
+            f.addEventListener('submit', async function (e) {
+                if (navigator.onLine) return;
+                e.preventDefault();
+                const name = f.querySelector('[name="name"]')?.value?.trim();
+                if (!name) { alert('Name is required.'); return; }
+                try {
+                    const ref = await window.CitiOffline.queueExpenseCategoryUpdate({
+                        expense_category_id: {{ (int) $expenseCategory->id }},
+                        name: name,
+                        description: f.querySelector('[name="description"]')?.value || '',
+                    });
+                    alert('Offline: Update queued. Ref: ' + ref.slice(0, 8));
+                    window.location.href = '{{ route('expense-categories.index') }}';
+                } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+            });
+        })();
+    </script>
 @endsection

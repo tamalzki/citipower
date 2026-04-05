@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ config('app.name') }} - @yield('title')</title>
+    <link rel="manifest" href="{{ asset('manifest.webmanifest') }}">
+    <meta name="theme-color" content="#0f172a">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <style>
@@ -226,6 +229,69 @@
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+
+        .net-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #334155;
+        }
+        .net-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: #22c55e;
+        }
+        .net-status.offline {
+            color: #9a3412;
+            background: #fff7ed;
+            border-color: #fed7aa;
+        }
+        .net-status.offline .net-status-dot {
+            background: #f97316;
+        }
+        .sync-state {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #334155;
+        }
+        .sync-state.syncing {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: #1d4ed8;
+        }
+        .sync-state.warn {
+            background: #fff7ed;
+            border-color: #fed7aa;
+            color: #9a3412;
+        }
+        .sync-spinner {
+            width: 11px;
+            height: 11px;
+            border: 2px solid currentColor;
+            border-right-color: transparent;
+            border-radius: 999px;
+            display: inline-block;
+            animation: spin .9s linear infinite;
+            opacity: 0;
+        }
+        .sync-state.syncing .sync-spinner { opacity: 1; }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
         .topbar-date {
@@ -732,6 +798,14 @@
                 <h1>@yield('title')</h1>
             </div>
             <div class="topbar-right">
+                <div id="net-status" class="net-status" title="Connectivity status">
+                    <span class="net-status-dot"></span>
+                    <span id="net-status-text">Online</span>
+                </div>
+                <div id="sync-state" class="sync-state" title="Offline sync status">
+                    <span class="sync-spinner"></span>
+                    <span id="sync-state-text">Synced</span>
+                </div>
                 @if(in_array($role, ['owner', 'cashier']))
                     <a href="{{ route('sales.create') }}" class="btn btn-primary btn-sm">+ New Sale</a>
                 @endif
@@ -754,5 +828,70 @@
     </div>
 
 </div>
+<script src="{{ asset('offline-sync.js') }}"></script>
+<script>
+    (function () {
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('{{ asset('sw.js') }}').catch(function () {});
+            });
+        }
+
+        var statusEl = document.getElementById('net-status');
+        var textEl = document.getElementById('net-status-text');
+        var syncEl = document.getElementById('sync-state');
+        var syncTextEl = document.getElementById('sync-state-text');
+
+        function refreshNetworkStatus() {
+            if (!statusEl || !textEl) return;
+            var online = navigator.onLine;
+            textEl.textContent = online ? 'Online' : 'Offline';
+            statusEl.classList.toggle('offline', !online);
+        }
+
+        function setSyncState(label, mode) {
+            if (!syncEl || !syncTextEl) return;
+            syncTextEl.textContent = label;
+            syncEl.classList.remove('syncing', 'warn');
+            if (mode === 'syncing') syncEl.classList.add('syncing');
+            if (mode === 'warn') syncEl.classList.add('warn');
+        }
+
+        window.addEventListener('online', refreshNetworkStatus);
+        window.addEventListener('offline', refreshNetworkStatus);
+        refreshNetworkStatus();
+        setSyncState('Synced', 'idle');
+
+        window.addEventListener('citi-offline-sync-status', function (event) {
+            var d = (event && event.detail) || {};
+            var pending = Number(d.pending || 0);
+            var summary = d.summary || {};
+            var synced = Number(summary.synced || 0);
+            var failed = Number(summary.failed || 0);
+
+            if (d.state === 'syncing') {
+                setSyncState('Syncing ' + pending + ' pending...', 'syncing');
+                return;
+            }
+            if (d.state === 'offline') {
+                setSyncState(pending > 0 ? ('Offline · ' + pending + ' queued') : 'Offline', 'warn');
+                return;
+            }
+            if (d.state === 'error') {
+                setSyncState('Sync error · pending ' + pending, 'warn');
+                return;
+            }
+            if (d.state === 'partial') {
+                setSyncState('Synced ' + synced + ' · failed ' + failed + ' · pending ' + pending, 'warn');
+                return;
+            }
+            if (pending > 0) {
+                setSyncState('Pending ' + pending, 'warn');
+            } else {
+                setSyncState(synced > 0 ? ('Synced ' + synced) : 'Synced', 'idle');
+            }
+        });
+    })();
+</script>
 </body>
 </html>

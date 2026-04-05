@@ -11,7 +11,7 @@
         <a href="{{ route('products.index') }}" class="btn btn-secondary">← Back</a>
     </div>
 
-    <form action="{{ route('products.store') }}" method="POST">
+    <form action="{{ route('products.store') }}" method="POST" id="product-form">
         @csrf
         <div style="display:grid; grid-template-columns:1fr 380px; gap:20px; align-items:start;">
 
@@ -182,5 +182,50 @@
             addSupplierRow('{{ $sid }}', '{{ old("supplier_costs." . $i, "") }}');
         @endforeach
     @endif
+
+    (function () {
+        const form = document.getElementById('product-form');
+        if (!form || !window.CitiOffline || typeof window.CitiOffline.queueProductCreate !== 'function') return;
+        form.addEventListener('submit', async function (e) {
+            if (navigator.onLine) return;
+            e.preventDefault();
+            const container = document.getElementById('supplier-rows');
+            const selects = container.querySelectorAll('select[name="supplier_ids[]"]');
+            const costInputs = container.querySelectorAll('input[name="supplier_costs[]"]');
+            const supplier_ids = [];
+            const supplier_costs = [];
+            selects.forEach(function (sel, i) {
+                if (sel.value) {
+                    supplier_ids.push(parseInt(sel.value, 10));
+                    supplier_costs.push(parseFloat(costInputs[i] && costInputs[i].value ? costInputs[i].value : '0'));
+                }
+            });
+            const payload = {
+                name: form.querySelector('[name="name"]')?.value,
+                sku: form.querySelector('[name="sku"]')?.value || '',
+                brand: form.querySelector('[name="brand"]')?.value || '',
+                category: form.querySelector('[name="category"]')?.value || '',
+                model: form.querySelector('[name="model"]')?.value || '',
+                description: form.querySelector('[name="description"]')?.value || '',
+                purchase_price: parseFloat(form.querySelector('[name="purchase_price"]')?.value || '0'),
+                selling_price: parseFloat(form.querySelector('[name="selling_price"]')?.value || '0'),
+                stock_quantity: parseInt(form.querySelector('[name="stock_quantity"]')?.value || '0', 10),
+                minimum_stock: parseInt(form.querySelector('[name="minimum_stock"]')?.value || '0', 10),
+                supplier_ids: supplier_ids,
+                supplier_costs: supplier_costs,
+            };
+            if (!payload.name || payload.purchase_price < 0 || payload.selling_price < 0) {
+                alert('Please fill required product fields.');
+                return;
+            }
+            try {
+                const id = await window.CitiOffline.queueProductCreate(payload);
+                alert('Offline: Product queued for sync when online. Ref: ' + id.slice(0, 8));
+                window.location.href = '{{ route('products.index') }}';
+            } catch (err) {
+                alert((err && err.message) || 'Failed to queue product offline.');
+            }
+        });
+    })();
     </script>
 @endsection

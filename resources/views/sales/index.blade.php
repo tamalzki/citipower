@@ -79,6 +79,8 @@
                                    class="btn btn-secondary btn-sm">View</a>
                                 @if(auth()->user()->role === 'owner')
                                 <form action="{{ route('sales.destroy', $sale) }}" method="POST"
+                                      class="offline-sale-delete-form"
+                                      data-sale-id="{{ $sale->id }}"
                                       style="display:inline"
                                       onsubmit="return confirm('Void this sale? Stock will be restored.')">
                                     @csrf
@@ -106,4 +108,32 @@
     </div>
 
     <div>{{ $sales->links() }}</div>
+    <script>
+        (function () {
+            document.querySelectorAll('.offline-sale-delete-form').forEach(form => {
+                form.addEventListener('submit', async function (e) {
+                    if (navigator.onLine || !window.CitiOffline || typeof window.CitiOffline.queueSaleDelete !== 'function') {
+                        return;
+                    }
+                    e.preventDefault();
+                    const confirmed = window.confirm('Void this sale? Stock will be restored.');
+                    if (!confirmed) return;
+
+                    const saleId = parseInt(form.dataset.saleId || '0', 10);
+                    if (!saleId) {
+                        alert('Missing sale id.');
+                        return;
+                    }
+
+                    try {
+                        const localId = await window.CitiOffline.queueSaleDelete({ sale_id: saleId });
+                        alert('Offline: Sale void queued and will auto-sync when online. Ref: ' + localId.slice(0, 8));
+                        form.closest('tr')?.remove();
+                    } catch (err) {
+                        alert((err && err.message) || 'Failed to queue sale void offline.');
+                    }
+                });
+            });
+        })();
+    </script>
 @endsection

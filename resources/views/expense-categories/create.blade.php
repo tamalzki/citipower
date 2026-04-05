@@ -14,7 +14,7 @@
     <div class="card" style="max-width: 620px;">
         <div class="card-title">Category Details</div>
         <div class="card-body">
-            <form action="{{ route('expense-categories.store') }}" method="POST">
+            <form action="{{ route('expense-categories.store') }}" method="POST" id="ec-create-form">
                 @csrf
 
                 <div class="form-group">
@@ -36,4 +36,24 @@
             </form>
         </div>
     </div>
+    <script>
+        (function () {
+            const f = document.getElementById('ec-create-form');
+            if (!f || !window.CitiOffline?.queueExpenseCategoryCreate) return;
+            f.addEventListener('submit', async function (e) {
+                if (navigator.onLine) return;
+                e.preventDefault();
+                const name = f.querySelector('[name="name"]')?.value?.trim();
+                if (!name) { alert('Name is required.'); return; }
+                try {
+                    const ref = await window.CitiOffline.queueExpenseCategoryCreate({
+                        name: name,
+                        description: f.querySelector('[name="description"]')?.value || '',
+                    });
+                    alert('Offline: Category queued. Ref: ' + ref.slice(0, 8));
+                    window.location.href = '{{ route('expense-categories.index') }}';
+                } catch (err) { alert((err && err.message) || 'Queue failed.'); }
+            });
+        })();
+    </script>
 @endsection

@@ -140,9 +140,9 @@
                        value="{{ old('order_date', $isEditing ? optional($purchaseOrder->order_date)->toDateString() : now()->toDateString()) }}" required>
             </div>
             <div class="form-group" style="margin-bottom:0;">
-                <label>Expected Arrival / Payment Due Date</label>
-                <input type="date" name="expected_arrival_date" class="form-control"
-                       value="{{ old('expected_arrival_date', $isEditing && $purchaseOrder->expected_arrival_date ? $purchaseOrder->expected_arrival_date->toDateString() : null) }}">
+                <label>Expected Arrival / Payment Due Date *</label>
+                <input type="date" name="expected_arrival_date" class="form-control" required
+                       value="{{ old('expected_arrival_date', $isEditing && $purchaseOrder->expected_arrival_date ? $purchaseOrder->expected_arrival_date->toDateString() : now()->toDateString()) }}">
             </div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px;">
@@ -668,6 +668,72 @@
         @endforeach
     });
     @endif
+
+    // Offline submit for PO create and edit
+    const poForm = document.getElementById('po-form');
+    if (poForm) {
+        poForm.addEventListener('submit', async function (e) {
+            const isEditing = {{ $isEditing ? 'true' : 'false' }};
+            const queueFn = isEditing ? window.CitiOffline?.queuePurchaseOrderUpdate : window.CitiOffline?.queuePurchaseOrder;
+            if (navigator.onLine || typeof queueFn !== 'function') {
+                return;
+            }
+
+            e.preventDefault();
+
+            const supplierId = supplierSel.value;
+            const orderDate = orderDateInput.value;
+            const expected = expectedDateInput.value;
+
+            if (!supplierId || !orderDate || !expected) {
+                alert('Supplier, order date, and expected arrival / due date are required.');
+                return;
+            }
+
+            const itemRows = Array.from(itemsBody.querySelectorAll('tr[id^=\"po-row-\"]'));
+            if (!itemRows.length) {
+                alert('Add at least one product to the purchase order.');
+                return;
+            }
+
+            const itemsPayload = itemRows.map(row => {
+                const productId = row.querySelector('input[name*=\"[product_id]\"]')?.value;
+                const qty = row.querySelector('.po-qty')?.value;
+                const price = row.querySelector('.po-price')?.value;
+                return {
+                    product_id: parseInt(productId, 10),
+                    quantity: parseInt(qty || '1', 10) || 1,
+                    purchase_price: parseFloat(price || '0'),
+                };
+            }).filter(item => item.product_id && item.quantity > 0 && item.purchase_price > 0);
+
+            if (!itemsPayload.length) {
+                alert('Each PO item must have a valid product, quantity, and price.');
+                return;
+            }
+
+            const payload = {
+                supplier_id: parseInt(supplierId, 10),
+                order_date: orderDate,
+                expected_arrival_date: expected,
+                payment_terms_count: parseInt(poForm.querySelector('[name=\"payment_terms_count\"]')?.value || '0', 10) || null,
+                payment_terms_days: parseInt(poForm.querySelector('[name=\"payment_terms_days\"]')?.value || '0', 10) || null,
+                note: poForm.querySelector('[name=\"note\"]')?.value || '',
+                items: itemsPayload,
+            };
+            if (isEditing) {
+                payload.purchase_order_id = {{ $isEditing ? (int) $purchaseOrder->id : 0 }};
+            }
+
+            try {
+                const localId = await queueFn(payload);
+                alert('Offline: Purchase order ' + (isEditing ? 'update queued' : 'saved locally') + ' and will auto-sync when online. Ref: ' + localId.slice(0, 8));
+                window.location.href = '{{ route('purchase-orders.index') }}';
+            } catch (err) {
+                alert((err && err.message) || 'Failed to queue purchase order offline.');
+            }
+        });
+    }
 })();
 </script>
 

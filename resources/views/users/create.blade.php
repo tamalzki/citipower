@@ -7,7 +7,10 @@
 <div class="page-header">
     <div>
         <h2>Add User</h2>
-        <p>Create a new staff account and assign a role</p>
+        <p>Create a new staff account and assign a role.</p>
+        <p style="font-size:13px; color:#64748b; margin-top:6px; max-width:520px;">
+            Adding users while offline is not supported. Create new accounts in the database, or use this form when you are online.
+        </p>
     </div>
     <a href="{{ route('users.index') }}" class="btn btn-secondary">← Back</a>
 </div>
@@ -68,5 +71,4 @@
         </div>
     </div>
 </div>
-
 @endsection

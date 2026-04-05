@@ -14,7 +14,7 @@
     <div class="card" style="max-width: 760px;">
         <div class="card-title">Expense Information</div>
         <div class="card-body">
-            <form action="{{ route('expenses.update', $expense) }}" method="POST">
+            <form action="{{ route('expenses.update', $expense) }}" method="POST" id="expense-edit-form">
                 @csrf
                 @method('PUT')
 
@@ -72,4 +72,44 @@
             </form>
         </div>
     </div>
+    <script>
+        (function () {
+            const form = document.getElementById('expense-edit-form');
+            if (!form) return;
+
+            form.addEventListener('submit', async function (e) {
+                if (navigator.onLine || !window.CitiOffline || typeof window.CitiOffline.queueExpenseUpdate !== 'function') {
+                    return;
+                }
+
+                e.preventDefault();
+
+                const categoryId = form.querySelector('[name="expense_category_id"]')?.value;
+                const expenseDate = form.querySelector('[name="expense_date"]')?.value;
+                const amount = parseFloat(form.querySelector('[name="amount"]')?.value || '0');
+                if (!categoryId || !expenseDate || amount <= 0) {
+                    alert('Category, date, and amount are required.');
+                    return;
+                }
+
+                const payload = {
+                    expense_id: {{ (int) $expense->id }},
+                    expense_category_id: parseInt(categoryId, 10),
+                    expense_date: expenseDate,
+                    reference_no: form.querySelector('[name="reference_no"]')?.value || '',
+                    amount: amount,
+                    vendor: form.querySelector('[name="vendor"]')?.value || '',
+                    description: form.querySelector('[name="description"]')?.value || '',
+                };
+
+                try {
+                    const localId = await window.CitiOffline.queueExpenseUpdate(payload);
+                    alert('Offline: Expense update queued and will auto-sync when online. Ref: ' + localId.slice(0, 8));
+                    window.location.href = '{{ route('expenses.index') }}';
+                } catch (err) {
+                    alert((err && err.message) || 'Failed to queue expense update offline.');
+                }
+            });
+        })();
+    </script>
 @endsection
